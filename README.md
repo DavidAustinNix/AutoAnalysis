@@ -21,4 +21,5 @@ ChpcAutoAnalysis - Runs and returns AutoAnalysis jobs on the Redwood cluster at 
 
 See the files in the ConfigNotes folder for specifics in setting up and running these two daemons (they use the same jar).
 
+Confluence page : https://ri-confluence.hci.utah.edu/x/qYB9D
 
