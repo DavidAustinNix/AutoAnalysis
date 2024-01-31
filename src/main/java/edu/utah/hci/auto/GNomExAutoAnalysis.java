@@ -499,8 +499,10 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 				"\nOptions:\n"+
 				"   -c Path to the AutoAnalysis configuration file.\n"+
 				"   -v Verbose debugging output.\n"+
+				"   -p Path to a file containing the GNomEx db user password.\n"+
 
-				"\nExample: java -jar GNomExAutoAnalysis.jar -c autoAnalysis.config.txt -v \n\n"+
+				"\nExample: java -jar -Xmx2G GNomExAutoAnalysis.jar -c autoAnalysis.config.txt -v -p \n"+
+				"               gnomExDb.cred.txt.\n\n"+
 
 
 				"**************************************************************************************\n");

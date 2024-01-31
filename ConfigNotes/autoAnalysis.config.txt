@@ -1,11 +1,11 @@
 # Key TAB Value configuration file for the GNomEx and Chpc AutoAnalysis daemons
-# Last Edit 30Jan2024 - david.nix@hci.utah.edu
+# Last Edit 31Jan2024 - david.nix@hci.utah.edu
 
 ########## GNomExAutoAnalysis Specific ###########
 
 # Connection URL for establishing a connection to the main GNomEx DB
 	# e.g. jdbc:sqlserver://hci-db.hci.utah.edu:1433;databaseName=gnomex;user=pipeline;password=XXXXXXXXXX;encrypt=true;trustServerCertificate=true
-	# Must contain 'XXXXXXXXXX'. This will be replaced with the pwd in the cred.txt file, see https://ri-confluence.hci.utah.edu/pages/viewpage.action?pageId=38076459
+	# Must contain 'XXXXXXXXXX'. This will be replaced with the pwd in the gnomExDb.cred.txt file
 connectionUrl	jdbc:sqlserver://hci-db.hci.utah.edu:1433;databaseName=gnomex;user=pipeline;password=XXXXXXXXXX;encrypt=true;trustServerCertificate=true
 
 # Full path to the repo containing Experiment Requests organized by year
