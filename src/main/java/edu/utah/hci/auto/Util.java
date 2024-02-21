@@ -18,6 +18,8 @@ import java.util.Arrays;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Random;
 import java.util.regex.Matcher;
@@ -424,7 +426,7 @@ public class Util {
 		return toReturn;
 	}
 	
-	/**Returns a String separated by commas for each bin.*/
+	/**Returns a String separated by the separator for each element.*/
 	public static String stringArrayToString(String[] s, String separator){
 		if (s==null) return "";
 		int len = s.length;
@@ -434,6 +436,21 @@ public class Util {
 		for (int i=1; i<len; i++){
 			sb.append(separator);
 			sb.append(s[i]);
+		}
+		return sb.toString();
+	}
+	
+	/**Returns a String separated by the separator for each element.*/
+	public static String stringHashToString(HashSet<String> s, String separator){
+		if (s==null) return "";
+		int len = s.size();
+		if (len==1) return s.iterator().next();
+		if (len==0) return "";
+		Iterator<String> it = s.iterator();
+		StringBuffer sb = new StringBuffer(it.next());
+		while (it.hasNext()){
+			sb.append(separator);
+			sb.append(it.next());
 		}
 		return sb.toString();
 	}

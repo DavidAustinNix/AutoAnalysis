@@ -24,7 +24,7 @@ dataPolicyUrl	https://uofuhealth.utah.edu/huntsman/shared-resources/gcb/cbi/data
 # For testing just one Experiment Request, the GNomExAutoAnalysis will only process this request
 	# set to all or an actual xxxxxR ID
 testRequest	all
-	#testRequest	22680R
+# testRequest	22680R
 
 # Supported organisms library prep configuration file
 supportedOrgLibWfConfigFile	/home/tomatosrvs/AutoAnalysis/Test/autoAnalysis.wf.config.txt

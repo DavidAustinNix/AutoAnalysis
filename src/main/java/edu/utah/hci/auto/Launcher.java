@@ -50,7 +50,7 @@ public class Launcher {
 	public static void printDocs(){
 		Util.pl("\n" +
 				"**************************************************************************************\n" +
-				"**                              Auto Analysis: Jan 2024                             **\n" +
+				"**                              Auto Analysis: Feb 2024                             **\n" +
 				"**************************************************************************************\n" +
 				"AA orchestrates auto analysis of sequencing files in GNomEx Experiment using two\n"+
 				"different daemons running on HCI or on CHPC. See xxxx for details.\n"+

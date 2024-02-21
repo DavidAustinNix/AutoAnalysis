@@ -21,7 +21,8 @@ rsync -rPtL ~/Code/AutoAnalysis/target/AutoAnalysis-0.1-jar-with-dependencies.ja
 # On Deadhorse as tomatosrvs in /home/tomatosrvs/AutoAnalysis/Test
 ssh hci-deadhorse; sudo su tomatosrvs; cd ~/AutoAnalysis/Test/
 cp /home/u0028003/ForAutoAnalysisDelme/* .
-nohup java -jar -Xmx1G AutoAnalysis-0.1-jar-with-dependencies.jar -l HCI -c autoAnalysis.config.txt -p gnomExDb.cred.txt  &> daemon.log &
+nohup java -jar -Xmx1G AutoAnalysis-0.1-jar-with-dependencies.jar -l HCI -c autoAnalysis.config.txt \
+-p gnomExDb.cred.txt -v &> daemon.log &
 tail -f daemon.log 
 
 ######## For testing the CHPC daemon ########
@@ -31,8 +32,9 @@ rsync -rPtL ~/Code/AutoAnalysis/target/AutoAnalysis-0.1-jar-with-dependencies.ja
   kingspeak.chpc.utah.edu:/uufs/chpc.utah.edu/common/home/u0028003/ForAutoAnalysisDelme/
 
 # On redwood2 as hcipepipeline in ~/AutoAnalysis/Test, see above for login process
+cd ~/AutoAnalysis/Test/
 scp  u0028003@kingspeak:/uufs/chpc.utah.edu/common/home/u0028003/ForAutoAnalysisDelme/* .
-nohup java -jar AutoAnalysis-0.1-jar-with-dependencies.jar -l CHPC -c autoAnalysis.config.txt &> daemon.log &
+nohup java -jar AutoAnalysis-0.1-jar-with-dependencies.jar -l CHPC -v -c autoAnalysis.config.txt &> daemon.log &
 tail -f daemon.log 
 
 ######## Misc Info and Links ##########

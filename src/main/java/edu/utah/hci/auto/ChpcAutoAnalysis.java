@@ -142,7 +142,7 @@ public class ChpcAutoAnalysis {
 			if (runme.exists() == false) throw new Exception("ERROR: failed to find "+runme);
 			HashMap<String, String> keyValues = Util.loadFileIntoHash(runme, 0, 1);
 			if (keyValues.containsKey("workflowPaths") == false) throw new Exception("ERROR: failed to find the 'workflowPaths' key in "+runme);
-			String[] paths = Util.COMMA_SPACE.split(keyValues.get("workflowPaths").trim());
+			String[] paths = Util.SEMI_COLON_SPACE.split(keyValues.get("workflowPaths").trim());
 			ArrayList<File> toCopyIn = new ArrayList<File>();
 			for (String p: paths) {
 				File f = new File(p);
@@ -542,7 +542,7 @@ public class ChpcAutoAnalysis {
 	public static void printDocs(){
 		Util.pl("\n" +
 				"**************************************************************************************\n" +
-				"**                            CHPC Auto Analysis: Jan 2024                          **\n" +
+				"**                            CHPC Auto Analysis: Feb 2024                          **\n" +
 				"**************************************************************************************\n" +
 				"CAA orchestrates auto analysis of fastq files in GNomEx Experiment Requests. \n"+
 

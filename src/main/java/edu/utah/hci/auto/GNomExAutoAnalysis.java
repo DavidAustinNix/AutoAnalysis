@@ -10,6 +10,8 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -47,7 +49,8 @@ public class GNomExAutoAnalysis {
 	private int numberRetriesForMultiQC = 2;
 	private HashMap<String, String[]> orgLibWorkflowDocs = null;
 	private double hoursPassed = 0;
-	private int jobsProcessed = 0;
+	private TreeSet<String> jobsProcessed = new TreeSet<String>();
+	private TreeMap<String, Integer> missingOrgLibPrep = new TreeMap<String, Integer>();
 	
 	//Requests split by status
 	private ArrayList<GNomExRequest> grsToBuildAutoAnalysis = new ArrayList<GNomExRequest>();
@@ -107,9 +110,10 @@ public class GNomExAutoAnalysis {
 			hoursPassed = 0;
 			Util.pl("Emailing admin that daemon is running...");
 			String subject = "GNomEx AutoAnalysis is alive "+Util.getDateTime();
-			String body = "\n"+jobsProcessed+" jobs processed in the last 24hrs\n";
+			String body = "\n"+jobsProcessed.size()+" jobs processed in the last 24hrs\n";
+			if (jobsProcessed.size()!=0) body = body + jobsProcessed;
 			Util.sendEmail(subject, adminEmail, body);
-			jobsProcessed = 0;
+			jobsProcessed.clear();
 		}
 		
 	}
@@ -174,7 +178,10 @@ public class GNomExAutoAnalysis {
 		String subject = "GNomEx AutoAnalysis for "+gr.getRequestIdCleaned()+" is complete";
 		
 		StringBuilder sb = new StringBuilder();
-		sb.append("AutoAnalysis and MultiQC have completed for the samples in "+gr.getRequestIdCleaned()+ "\n\n");
+		sb.append("AutoAnalysis and MultiQC have completed for the samples in "+gr.getRequestIdCleaned()+ "\n");
+		sb.append("\tOrgLib: "+gr.getOrganism()+" : "+gr.getLibraryPreparation()+"\n");
+		sb.append("\tLabGroup: "+gr.getLabGroupLastName()+", "+gr.getLabGroupFirstName()+"\n");
+		sb.append("\tRequestor: "+gr.getRequestorEmail()+ "\n\n");
 		sb.append("Access these via:\n\t"+experimentLinkUrl+ gr.getOriginalRequestId()+ "\n\tand look in the  '"+gr.getAutoAnalysisMainDirectory().getName()+"'  directory.\n\n");
 		sb.append("If you would like additional analysis assistance, submit a help request through our Jira ticketing system:\n\t"+ jiraUrl+"\n\n");
 		sb.append("Lastly, remember that all of the data files in this Experiment Request will be deleted after six months. If your group has a CORE "
@@ -229,9 +236,8 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 						if (verbose) Util.pl("\t\tDeleting symlinked job dir\t"+symLinkName);
 						Files.delete(sl);
 					}
+					jobsProcessed.add(jobDir.getName());
 				}
-				//record how many jobs processed
-				jobsProcessed+= jobs.length;
 			}
 		}
 	}
@@ -251,7 +257,8 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 		Util.pl("\nParsing GNomExRequests...");
 
 		boolean test = experimentRequestsToProc.toLowerCase().equals("all") == false;
-			
+		int numMissingOrgLibPrep = missingOrgLibPrep.size();
+		
 		for (GNomExRequest r: requests) {
 
 			if (test) {
@@ -308,6 +315,11 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 						grsToBuildAutoAnalysis.add(r);
 					}
 					else {
+						//add to missing org lib prep tracker.
+						Integer count = missingOrgLibPrep.get(orgLib);
+						if (count == null) missingOrgLibPrep.put(orgLib, 1);
+						else missingOrgLibPrep.put(orgLib, count+1);
+						
 						grsSkipped.add(r);
 						r.setErrorMessages("Library Protocol not supported at this time, skipping AutoAnalysis ");
 						if (verbose) Util.pl("\t"+ r.getErrorMessages());
@@ -315,6 +327,9 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 				}
 			}
 		}
+		//check if new missingOrgLibPreps
+		checkEmailMissingOrgLibPreps(numMissingOrgLibPrep);
+		
 		//stats
 		Util.pl("\t"+grsToBuildAutoAnalysis.size()+ "\tAutoAnalysis to run");
 		Util.pl("\t"+grsWithAutoAnalysis.size()+ "\tWith an existing AutoAnalysis");
@@ -322,6 +337,19 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 		Util.pl("\t"+grsOtherHelpRequests.size()+ "\tOthers with non AutoAnalysis help requests");
 	}
 
+
+	private void checkEmailMissingOrgLibPreps(int numMissingOrgLibPrep) {
+		if (numMissingOrgLibPrep != missingOrgLibPrep.size()) {
+			String subject = "GNomEx AutoAnalysis - new unsupported organism : library prep kits found";
+			StringBuilder sb = new StringBuilder("The following are all of the requested AlignQCs without a supported workflow :\n\n");
+			for (String olp: missingOrgLibPrep.keySet()) {
+				sb.append(missingOrgLibPrep.get(olp)); sb.append("\t"); sb.append(olp); sb.append("\n");
+			}
+			Util.sendEmail(subject, adminEmail, sb.toString());
+			Util.pl("\nNew unsupported organism : library prep kits found...");
+			Util.pl(sb);
+		}
+	}
 
 	public static void main(String[] args) {
 		if (args.length <= 2){
@@ -393,17 +421,20 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 		while ((line = in.readLine())!=null) {
 			line = line.trim();
 			if (line.startsWith("#") || line.length()==0) continue;
-			//Organism LibraryKit WFDirFiles MultiQCOptions
+			//Organism   LibraryKit(s)   WFDirFile(s)   MultiQCOptions
+			//    0          1                2              3
 			fields = Util.TAB.split(line);
 			if (fields.length != 4) Util.pl("\tWARNING: missing fields, skipping -> "+line);
 			else {
-				String key = fields[0].trim()+"_"+fields[1].trim();
-				orgLibWorkflowDocs.put(key, new String[] {fields[2], fields[3]});
+				String[] libPreps = Util.SEMI_COLON_SPACE.split(fields[1]);
+				for (String lp: libPreps) {
+					String key = fields[0].trim()+"_"+lp.trim();
+					orgLibWorkflowDocs.put(key, new String[] {fields[2], fields[3]});
+				}
 				if (verbose) Util.pl("\t"+line);
 			}
 		}
 		in.close();
-		
 	}
 
 	private void loadConfiguration() {
@@ -488,7 +519,7 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 	public static void printDocs(){
 		Util.pl("\n" +
 				"**************************************************************************************\n" +
-				"**                            GNomEx Auto Analysis: Jan 2024                        **\n" +
+				"**                            GNomEx Auto Analysis: Feb 2024                        **\n" +
 				"**************************************************************************************\n" +
 				"GAA orchestrates setting up auto analysis jobs from GNomEx Experiment fastq. It looks\n"+
 				"for ERs in the GNomEx db where the user has selected a genome build to align to,\n"+

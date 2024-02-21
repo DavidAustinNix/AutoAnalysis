@@ -24,7 +24,7 @@ public class GNomExRequest {
 	private File autoAnalysisMainDirectory = null;
 	private File autoAnalysisJobsDirectory = null;
 	
-	/*Comma delimited, no spaces, full path, on Redwood, if a dir the contents will be copied into each job.*/
+	/*Semi-colon space delimited, full path, on Redwood, if a dir the contents will be copied into each job.*/
 	private String workflowPaths = null;
 	
 	private String errorMessages = null;
@@ -83,28 +83,43 @@ public class GNomExRequest {
 
 			//create sub directories, copy in the workflow docs, link in the fastq lines
 			ArrayList<File> toLink = new ArrayList<File>();
+			HashSet<String> sampleRepeats = new HashSet<String>();
 			for (String sampleId: sampleIds) {
 
 				// make the sub dir
 				File subDir = new File (autoAnalysisJobsDirectory, sampleId);
 				subDir.mkdir();
 
-				//link in the fastqs
+				//link in the fastqs and parse the unique sample names
 				toLink.clear();
-				for (File f: fastqFiles) if (f.getName().startsWith(sampleId+ "_")) toLink.add(f);
+				sampleRepeats.clear();
+				for (File f: fastqFiles) {
+					if (f.getName().startsWith(sampleId+ "_")) {
+						toLink.add(f);
+						//pull sample names, needed for CellRanger, HTG often adds new sequencing
+						//20758X2_230503_A00421_0548_AH7M32DRX3_S2_L002_I1_001.fastq.gz
+						//20758X2_230731_A00421_0576_BHGMFWDRX3_S2_L002_I1_001.fastq.gz
+						//   0       1      2     3      4       5
+						String[] s = Util.UNDERSCORE.split(f.getName());
+						if (s.length>=5) sampleRepeats.add(s[0]+"_"+s[1]+"_"+s[2]+"_"+s[3]+"_"+s[4]);
+						else throw new IOException ("FAILED to find at least 5 _ separated name elements in "+f.getName());
+					}
+				}
 				Util.createSymbolicLinks(toLink, subDir);
+				String sampleNames= Util.stringHashToString(sampleRepeats, ",");
 				
 				//link the sub dir to the chpcLinkDirectory
 				toLink.clear();
 				toLink.add(subDir);
 				Util.createSymbolicLinks(toLink, chpcLinkDirectory);
-
+				
 				//add a RUNME.txt file
 				String runMe = 
-						"workflowPaths\t"+workflowPaths+
+						"sampleNames\t"+sampleNames+
+						"\nworkflowPaths\t"+workflowPaths+
 						"\norganism\t"+ organism+
 						"\ngenomeBuild\t"+genomeBuild+
-						"\nlibraryPrep\t"+libraryPreparation;
+						"\nlibraryPrep\t"+libraryPreparation+"\n";
 				Util.writeString(runMe, new File(subDir, "RUNME"));
 			} 
 			return true;

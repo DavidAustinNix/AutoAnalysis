@@ -4,9 +4,6 @@ import java.sql.*;
 import java.util.ArrayList;
 import javax.xml.bind.*;
 
-/**Runs primary analysis as requested in GNomEx, fires every 6hrs
- * 1) Interrogates the standard GNomEx sql server for analysis requests submitted with the Experiment Request
- * */
 public class GNomExDbQuery {
 	
 	// jdbc:sqlserver://hci-db.hci.utah.edu:1433;databaseName=gnomex;user=pipeline;password=xxxxxxx
@@ -94,7 +91,7 @@ public class GNomExDbQuery {
 					else results[resultsIndex++] = "NA";
 				}
 				requestsAl.add(results);
-				//Util.pl(Misc.stringArrayToString(results, "\n")+"\n");
+				//Util.pl(Util.stringArrayToString(results, "\n")+"\n");
 			}
 			
 			parseRequests(requestsAl);
