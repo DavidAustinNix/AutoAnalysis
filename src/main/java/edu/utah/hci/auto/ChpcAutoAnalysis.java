@@ -120,8 +120,6 @@ public class ChpcAutoAnalysis {
 		}
 	}
 
-	
-	
 	private void emailErrorMessages() {
 		if (errorMessages.size()==0) return;
 		Util.pl(printPrepend+ "Emailing error messages...");
@@ -179,11 +177,52 @@ public class ChpcAutoAnalysis {
 		
 		//execute the cmds.
 		if (dryRun) for (String[] c: commandsToExecute) Util.pl("\tDryRunExec\t"+Util.stringArrayToString(c, " "));
-		else if (executeCommands(chpcTempDirectory) == false) throw new Exception("ERROR: copying new jobs from HCI to CHPC, aborting.");
+		else if (executeCommands(chpcTempDirectory) == false) throw new Exception("ERROR: failed to launch new slurm jobs, aborting.");
+	}
+	
+	private void launchNewJob(String jobDirName) throws Exception {
+		//copy in workflow docs using the path in the RUNME file
+		File newJobDir = new File (chpcJobDirectory, jobDirName);
+		File runme = new File (newJobDir, "RUNME");
+		if (runme.exists() == false) throw new Exception("ERROR: failed to find "+runme);
+		HashMap<String, String> keyValues = Util.loadFileIntoHash(runme, 0, 1);
+		if (keyValues.containsKey("workflowPaths") == false) throw new Exception("ERROR: failed to find the 'workflowPaths' key in "+runme);
+		String[] paths = Util.SEMI_COLON_SPACE.split(keyValues.get("workflowPaths").trim());
+		ArrayList<File> toCopyIn = new ArrayList<File>();
+		for (String p: paths) {
+			File f = new File(p);
+			if (f.exists() == false) throw new Exception("ERROR: failed to find "+f+ " as specified in "+runme);
+			if (f.isFile()) toCopyIn.add(f);
+			else {
+				File[] toAdd = Util.extractFiles(f);
+				for (File ta: toAdd) toCopyIn.add(ta);
+			}
+		}
+		File[] toCopy = new File[toCopyIn.size()];
+		toCopyIn.toArray(toCopy);
+		if (toCopy.length == 0) throw new Exception("ERROR: failed to find any workflow doc files in "+runme);
+		File shellScript = Util.copyInWorkflowDocs(toCopy, newJobDir);
+
+
+		//create the cmds to execute a slurm job in a shell script
+		StringBuilder sb = new StringBuilder();
+		// set to exit upon fail
+		sb.append("set -e\n");
+		// change into the job dir
+		sb.append("cd "+newJobDir.getCanonicalPath()+"\n");
+		// sbatch the shell script
+		sb.append("sbatch --nice=10000 -J "+newJobDir.getName()+"_AutoAnalysis "+shellScript.getName()+ "\n");
+		// touch QUEUED, needed if there are too many jobs and this goes into the slurm queue
+		sb.append("touch QUEUED\n");
+
+		//execute it
+		int exitCode = Util.executeShellScriptReturnExitCode(sb.toString(), chpcTempDirectory);
+		if (exitCode !=0) throw new IOException("ERROR: failed to launch slurm job "+jobDirName);
 	}
 
+
 	private void copyJobDirsOnHci2Chpc() throws Exception {
-		Util.pl(printPrepend+ "Copying new jobs from HCI to CHPC...");
+		Util.pl(printPrepend+ "Copying and launching new jobs from HCI to CHPC...");
 		
 		//create the cmds
 		commandsToExecute.clear();

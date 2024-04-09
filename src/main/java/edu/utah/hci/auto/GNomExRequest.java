@@ -3,6 +3,7 @@ package edu.utah.hci.auto;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 
 public class GNomExRequest {
@@ -130,6 +131,38 @@ public class GNomExRequest {
 		}
 		return false;
 	}
+	
+	/**Returns false if all samples don't have just an _R1_ and _R2_ named fastq, otherwise probably a UMI is present.*/
+	public boolean checkR1R2FastqsPerSample() {
+
+			//21369X1_20231010_LH00227_0016_B227FWCLT3_S15_L001_R1_001.fastq.gz
+			//21369X1_20231010_LH00227_0016_B227FWCLT3_S15_L001_R2_001.fastq.gz
+			HashMap<String, ArrayList<String>> sampleFastqs = new HashMap<String, ArrayList<String>>();
+			String fileName = null;
+			for (File f: fastqFiles) {
+				fileName = f.getName();
+				String[] split = Util.UNDERSCORE.split(fileName);
+				ArrayList<String> fileNames = sampleFastqs.get(split[0]);
+				if (fileNames == null) {
+					fileNames = new ArrayList<String>();
+					sampleFastqs.put(split[0], fileNames);
+				}
+				fileNames.add(fileName);
+			}
+			//check that each sample has an _R1_ and _R2_
+			for (ArrayList<String> al: sampleFastqs.values()) {
+				int r1 = 0;
+				int r2 = 0;
+				if (al.size()!=2) return false;
+				for (String s: al) {
+					if (s.contains("_R1_")) r1++;
+					else if (s.contains("_R2_")) r2++;
+				}
+				if (r1!=1 || r2!=1) return false;
+			}
+			return true;
+	}
+
 	
 	public boolean checkForAutoAnalysis() {
 		File[] dirs = Util.extractFilesPrefix(requestDirectory, "AutoAnalysis_");

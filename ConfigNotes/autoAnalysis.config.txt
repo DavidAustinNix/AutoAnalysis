@@ -1,5 +1,5 @@
 # Key TAB Value configuration file for the GNomEx and Chpc AutoAnalysis daemons
-# Last Edit 31Jan2024 - david.nix@hci.utah.edu
+# Last Edit 9 April 2024 - david.nix@hci.utah.edu
 
 ########## GNomExAutoAnalysis Specific ###########
 
@@ -24,13 +24,21 @@ dataPolicyUrl	https://uofuhealth.utah.edu/huntsman/shared-resources/gcb/cbi/data
 # For testing just one Experiment Request, the GNomExAutoAnalysis will only process this request
 	# set to all or an actual xxxxxR ID
 testRequest	all
-# testRequest	22680R
+	# testRequest	22680R
 
 # Supported organisms library prep configuration file
 supportedOrgLibWfConfigFile	/home/tomatosrvs/AutoAnalysis/Test/autoAnalysis.wf.config.txt
 
-# Path to the USeq JobCleaner app. This is called after running MultiQC on each Job directory to reduce the number of small files
+# Path to the USeq JobCleaner app. This is called after running QC tools on each Job directory to reduce the number of small files. It deletes .crai/.bai/.tbi indexes, COMPLETE files, and zips up Logs and RunScripts folders.
 useqJobCleaner	/home/tomatosrvs/AutoAnalysis/Test/USeq/Apps/JobCleaner
+
+# Path to the USeq AggregateQC2 app. Only run on the dnaAlignQC jobs.  Nice summary statistics difficult to find in MultiQC.
+useqAggregateQCStats2	/home/tomatosrvs/AutoAnalysis/Test/USeq/Apps/AggregateQCStats2
+
+# Email addresses to send new analysis alerts, e.g. for HTG
+# analysisReadyEmail	brian.dalley@hci.utah.edu,Opal.Allen@hci.utah.edu,david.nix@hci.utah.edu
+analysisReadyEmail	david.nix@hci.utah.edu
+
 
 ########## Used by Both ###########
 
@@ -40,7 +48,7 @@ useqJobCleaner	/home/tomatosrvs/AutoAnalysis/Test/USeq/Apps/JobCleaner
 	# The GNomExAutoAnalysis scans these soft linked directories for a COMPLETE file and then deletes the soft link leaving the finished dir in the Experiment Request.
 hciLinkDirectory	/home/tomatosrvs/AutoAnalysis/Test/Jobs4CHPC/
 
-# Email address to send updates and issues
+# Email addresses to send updates and issues, comma delimited, no spaces
 adminEmail	david.nix@hci.utah.edu
 
 # Time to wait for each daemon launch cycle, set to 0 to run and exit, doubles OK
@@ -50,7 +58,7 @@ hoursToWait	6
 ########## ChpcAutoAnalysis Specific ###########
 
 # HCI userName@serverIP for executing cmds from CHPC to HCI for ssh and 
-hciUserNameIp	tomatosrvs@hci-bio4.hci.utah.edu
+hciUserNameIp	tomatosrvs@hci-deadhorse.hci.utah.edu
 
 # CHPC job directory, the ChpcAutoAnalysis daemon on CHPC will be executing slurm jobs in this directory  
 	# Analysis jobs with a RUNME file to copied over
@@ -64,7 +72,7 @@ slurmPartiton	hci-rw
 slurmUserTruncated	hcipepip
 
 # Number of simultaneous rsync transfers, slurm job submissions
-maxProcessingThreads	2
+maxProcessingThreads	4
 
 
 

@@ -2,15 +2,16 @@
 
 # To do stuff without password prompts between CHPC and HCI
 
-1) Login to hci-bio4.hci.utah.edu as yourself, pw and duo required, and sudo su to tomatosrvs, pw required
-ssh hci-bio4.hci.utah.edu
+1) Login to hci-deadhorse.hci.utah.edu as yourself, pw and duo required, and sudo su to tomatosrvs, pw required
+ssh hci-deadhorse.hci.utah.edu
 sudo su tomatosrvs
 
-2) Now you can login to redwood2.chpc.utah.edu as hcipepipeline from hci-bio4. Fetch the password from https://ri-confluence.hci.utah.edu/x/qYB9D No duo required.
+2) Now you can login to redwood2.chpc.utah.edu as hcipepipeline from hci-deadhorse. Fetch the password from 
+   https://ri-confluence.hci.utah.edu/x/qYB9D No duo required.
 ssh hcipepipeline@redwood2.chpc.utah.edu
 
-3) From redwood2 you can call out cmds to tomatosrvs@hci-bio4.hci.utah.edu via ssh w/o authentication via previously configured ssh keys
-ssh tomatosrvs@hci-bio4.hci.utah.edu 'ls ~/; date; pwd'
+3) From redwood2 you can call out cmds to tomatosrvs@hci-deadhorse.hci.utah.edu via ssh w/o authentication via previously configured ssh keys
+ssh tomatosrvs@hci-deadhorse.hci.utah.edu 'ls ~/; date; pwd'
 
 ######## For testing the HCI GNomEx daemon ########
 # On laptop
@@ -22,8 +23,11 @@ rsync -rPtL ~/Code/AutoAnalysis/target/AutoAnalysis-0.1-jar-with-dependencies.ja
 ssh hci-deadhorse; sudo su tomatosrvs; cd ~/AutoAnalysis/Test/
 cp /home/u0028003/ForAutoAnalysisDelme/* .
 nohup java -jar -Xmx1G AutoAnalysis-0.1-jar-with-dependencies.jar -l HCI -c autoAnalysis.config.txt \
--p gnomExDb.cred.txt -v &> daemon.log &
+-p gnomExDb.cred.txt &> daemon.log &
 tail -f daemon.log 
+
+# If needed start up the docker daemon, as root on deadhorse:
+systemctl start docker
 
 ######## For testing the CHPC daemon ########
 # On laptop
@@ -33,8 +37,10 @@ rsync -rPtL ~/Code/AutoAnalysis/target/AutoAnalysis-0.1-jar-with-dependencies.ja
 
 # On redwood2 as hcipepipeline in ~/AutoAnalysis/Test, see above for login process
 cd ~/AutoAnalysis/Test/
+mkdir Logs TempDir
+ln -s /scratch/general/pe-nfs1/hcipepipeline/AutoAnalysis/Jobs .
 scp  u0028003@kingspeak:/uufs/chpc.utah.edu/common/home/u0028003/ForAutoAnalysisDelme/* .
-nohup java -jar AutoAnalysis-0.1-jar-with-dependencies.jar -l CHPC -v -c autoAnalysis.config.txt &> daemon.log &
+nohup java -jar AutoAnalysis-0.1-jar-with-dependencies.jar -l CHPC -c autoAnalysis.config.txt &> daemon.log &
 tail -f daemon.log 
 
 ######## Misc Info and Links ##########

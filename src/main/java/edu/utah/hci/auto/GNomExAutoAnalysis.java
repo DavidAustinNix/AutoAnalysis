@@ -31,12 +31,14 @@ public class GNomExAutoAnalysis {
 	private String connectionUrl = null;
 	private HashMap<String, File> experimentalSubDirs = null;
 	private String adminEmail = null;
+	private String analysisReadyEmail = null;
 	private String hciLinkDirectoryString = null;
 	private File hciLinkDirectory = null;
 	private boolean verbose = false;
 	private double hoursToWait = 0;
 	private long waitTime = 0;
 	private File useqJobCleaner = null;
+	private File useqAggregateQCStats2 = null;
 	private String experimentLinkUrl = null;
 	private String jiraUrl = null;
 	private String dataPolicyUrl = null;
@@ -51,6 +53,7 @@ public class GNomExAutoAnalysis {
 	private double hoursPassed = 0;
 	private TreeSet<String> jobsProcessed = new TreeSet<String>();
 	private TreeMap<String, Integer> missingOrgLibPrep = new TreeMap<String, Integer>();
+	private String dnaAlignQCWFName = "dnaAlignQC";
 	
 	//Requests split by status
 	private ArrayList<GNomExRequest> grsToBuildAutoAnalysis = new ArrayList<GNomExRequest>();
@@ -161,6 +164,16 @@ public class GNomExAutoAnalysis {
 			sb.append("docker run --rm --user $(id -u):$(id -g) -v "+alignDir+":"+alignDir+
 					" ewels/multiqc multiqc "+opts+" --outdir "+alignDir+"/MultiQC --title "+name+
 					" --filename "+name+"_MultiQCReport.html "+jobsDir+"\n");
+
+			// dnaAlign?
+			// fetch all of the sing files these will contain the name of the workflow, e.g. dnaAlignQC.sing
+			ArrayList<File> singFiles = Util.fetchAllFilesRecursively(new File(jobsDir), ".sing");
+			if (singFiles.size()==0) throw new IOException("ERROR: failed to fetch any xxx.sing files from "+jobsDir);
+			if (singFiles.get(0).getName().startsWith("dnaAlignQC")) {
+				sb.append("java -jar -Xmx5G "+useqAggregateQCStats2.getCanonicalPath()+" -j "+
+						jobsDir+" -s "+alignDir+"/AggQC -a '.+CutAdapt.log' -r '.+UniObRC.json.gz' \n");
+			}
+			
 			// small file cleanup
 			sb.append("java -jar -Xmx5G "+useqJobCleaner.getCanonicalPath()+" -n 'Logs,RunScripts' -m -r "+
 					jobsDir+" -e 'COMPLETE,.tbi,.crai,.bai'\n");
@@ -190,7 +203,7 @@ public class GNomExAutoAnalysis {
 
 Util.pl("\tEmailing ADMIN! Change back to client!");
 Util.sendEmail(subject, adminEmail, sb.toString());
-//Util.sendEmail(subject, gr.getRequestorEmail(), sb.toString());
+//Util.sendEmail(subject, gr.getRequestorEmail()+","+analysisReadyEmail, sb.toString());
 		
 	}
 
@@ -257,7 +270,7 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 		Util.pl("\nParsing GNomExRequests...");
 
 		boolean test = experimentRequestsToProc.toLowerCase().equals("all") == false;
-		int numMissingOrgLibPrep = missingOrgLibPrep.size();
+		TreeMap<String, Integer> molp = new TreeMap<String, Integer>();
 		
 		for (GNomExRequest r: requests) {
 
@@ -309,16 +322,27 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 					//is this a supported organism_libraryPrep?
 					String orgLib = r.getOrganism()+"_"+r.getLibraryPreparation();
 					if (orgLibWorkflowDocs.containsKey(orgLib)) {
-						if (verbose) Util.pl("\tReady for Bulk RNASeq AutoAnalysis");
 						String[] pathsMultiQCOptions = orgLibWorkflowDocs.get(orgLib);
+						//check fastq for dnaAlignQC?
+						if (pathsMultiQCOptions[0].contains(dnaAlignQCWFName)) {
+							if (r.checkR1R2FastqsPerSample()==false) {
+								r.setErrorMessages("For dnaAlignQC workflows, only fastq datasets with an _R1_ and _R2_ are supported, UMIs need custom analysis. Check all samples for just _R1_ and _R2_.");
+								grsSkipped.add(r);
+								grsOtherHelpRequests.add(r);
+								if (verbose) Util.pl("\t"+ r.getErrorMessages());
+								continue;
+							}
+						}
+						
+						if (verbose) Util.pl("\tReady for AutoAnalysis");
 						r.setWorkflowPaths(pathsMultiQCOptions[0]);
 						grsToBuildAutoAnalysis.add(r);
 					}
 					else {
 						//add to missing org lib prep tracker.
-						Integer count = missingOrgLibPrep.get(orgLib);
-						if (count == null) missingOrgLibPrep.put(orgLib, 1);
-						else missingOrgLibPrep.put(orgLib, count+1);
+						Integer count = molp.get(orgLib);
+						if (count == null) molp.put(orgLib, 1);
+						else molp.put(orgLib, count+1);
 						
 						grsSkipped.add(r);
 						r.setErrorMessages("Library Protocol not supported at this time, skipping AutoAnalysis ");
@@ -328,7 +352,7 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 			}
 		}
 		//check if new missingOrgLibPreps
-		checkEmailMissingOrgLibPreps(numMissingOrgLibPrep);
+		checkEmailMissingOrgLibPreps(molp);
 		
 		//stats
 		Util.pl("\t"+grsToBuildAutoAnalysis.size()+ "\tAutoAnalysis to run");
@@ -338,8 +362,26 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 	}
 
 
-	private void checkEmailMissingOrgLibPreps(int numMissingOrgLibPrep) {
-		if (numMissingOrgLibPrep != missingOrgLibPrep.size()) {
+	private void checkEmailMissingOrgLibPreps(TreeMap<String, Integer> molp) {
+		//check if different
+		boolean different = false;
+		for (String key: molp.keySet()) {
+			if (missingOrgLibPrep.containsKey(key) == false) {
+				different = true;
+				break;
+			}
+			else {
+				int newCount = molp.get(key);
+				int oldCount = missingOrgLibPrep.get(key);
+				if (newCount != oldCount) {
+					different = true;
+					break;
+				}
+			}
+		}
+		
+		if (different) {
+			missingOrgLibPrep = molp;
 			String subject = "GNomEx AutoAnalysis - new unsupported organism : library prep kits found";
 			StringBuilder sb = new StringBuilder("The following are all of the requested AlignQCs without a supported workflow :\n\n");
 			for (String olp: missingOrgLibPrep.keySet()) {
@@ -461,6 +503,10 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 		adminEmail = configSettings.get("adminEmail");
 		if (adminEmail == null) Util.printErrAndExit("\nError: failed to find the 'adminEmail' key in "+ configFile);
 		
+		//analysisReadyEmail
+		analysisReadyEmail = configSettings.get("analysisReadyEmail");
+		if (analysisReadyEmail == null) Util.printErrAndExit("\nError: failed to find the 'analysisReadyEmail' key in "+ configFile);
+		
 		//testRequest
 		experimentRequestsToProc = configSettings.get("testRequest");
 		if (experimentRequestsToProc == null) Util.printErrAndExit("\nError: failed to find the 'testRequest' key in "+ configFile);
@@ -491,6 +537,12 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 		useqJobCleaner = new File (configSettings.get("useqJobCleaner"));
 		if (useqJobCleaner.exists() == false) Util.printErrAndExit("\nError: failed to find the 'useqJobCleaner' app in "+ configFile);
 		
+		//AggregateQCStats2
+		if (configSettings.containsKey("useqAggregateQCStats2") == false) Util.printErrAndExit("\nError: failed to find the 'useqAggregateQCStats2' key in "+ configFile);
+		useqAggregateQCStats2 = new File (configSettings.get("useqAggregateQCStats2"));
+		if (useqAggregateQCStats2.exists() == false) Util.printErrAndExit("\nError: failed to find the 'useqAggregateQCStats2' app in "+ configFile);
+
+		
 		// supportedOrgLibWfConfigFile
 		if (configSettings.containsKey("supportedOrgLibWfConfigFile") == false) Util.printErrAndExit("\nError: failed to find the 'supportedOrgLibWfConfigFile' key in "+ configFile);
 		supportedOrgLibWfConfigFile = new File (configSettings.get("supportedOrgLibWfConfigFile"));
@@ -500,6 +552,7 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 		//print out settings
 		Util.pl("Config Settings..."+
 				"\n  adminEmail\t"+ adminEmail+
+				"\n  analysisReadyEmail\t"+analysisReadyEmail+
 				"\n  hoursToWait\t"+ hoursToWait+
 				"\n  verbose\t"+verbose+
 				"\n  connectionUrl\t"+ connectionUrl+
@@ -510,7 +563,8 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 				"\n  jiraUrl\t"+ jiraUrl+
 				"\n  dataPolicyUrl\t"+ dataPolicyUrl+
 				"\n  supportedOrgLibWfConfigFile\t"+ supportedOrgLibWfConfigFile+
-				"\n  useqJobCleaner\t"+ useqJobCleaner
+				"\n  useqJobCleaner\t"+ useqJobCleaner+
+				"\n  useqAggregateQCStats2\t"+ useqAggregateQCStats2
 				);
 		
 	}
@@ -519,7 +573,7 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 	public static void printDocs(){
 		Util.pl("\n" +
 				"**************************************************************************************\n" +
-				"**                            GNomEx Auto Analysis: Feb 2024                        **\n" +
+				"**                           GNomEx Auto Analysis: March 2024                       **\n" +
 				"**************************************************************************************\n" +
 				"GAA orchestrates setting up auto analysis jobs from GNomEx Experiment fastq. It looks\n"+
 				"for ERs in the GNomEx db where the user has selected a genome build to align to,\n"+
