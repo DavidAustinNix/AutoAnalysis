@@ -10,6 +10,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
@@ -34,15 +35,19 @@ public class GNomExAutoAnalysis {
 	private String analysisReadyEmail = null;
 	private String hciLinkDirectoryString = null;
 	private File hciLinkDirectory = null;
+	private File hciTempDirectory = null;
 	private boolean verbose = false;
 	private double hoursToWait = 0;
 	private long waitTime = 0;
 	private File useqJobCleaner = null;
 	private File useqAggregateQCStats2 = null;
+	private File builtJiraTickets = null;
 	private String experimentLinkUrl = null;
 	private String jiraUrl = null;
+	private String jiraApiUrl = null;
 	private String dataPolicyUrl = null;
 	private String experimentRequestsToProc = null;
+	private String jiraApiCredentials = null;
 	
 	//internal fields
 	//Date formatting, 2023-11-14 07:43:13.38
@@ -54,12 +59,14 @@ public class GNomExAutoAnalysis {
 	private TreeSet<String> jobsProcessed = new TreeSet<String>();
 	private TreeMap<String, Integer> missingOrgLibPrep = new TreeMap<String, Integer>();
 	private String dnaAlignQCWFName = "dnaAlignQC";
+	public static int minimumFastqFileLineCount = 4000;
+	private HashSet<String> idsWithJiraTickets = null;
 	
 	//Requests split by status
 	private ArrayList<GNomExRequest> grsToBuildAutoAnalysis = new ArrayList<GNomExRequest>();
 	private ArrayList<GNomExRequest> grsWithAutoAnalysis = new ArrayList<GNomExRequest>();
 	private ArrayList<GNomExRequest> grsSkipped = new ArrayList<GNomExRequest>();
-	private ArrayList<GNomExRequest> grsOtherHelpRequests = new ArrayList<GNomExRequest>();
+	private ArrayList<GNomExRequest> grsRequestingAnalysisAssistance = new ArrayList<GNomExRequest>();
 	private ArrayList<GNomExRequest> grsToMultiQC = new ArrayList<GNomExRequest>();
 	private ArrayList<String> errorMessages = new ArrayList<String>();
 
@@ -87,6 +94,8 @@ public class GNomExAutoAnalysis {
 
 				// Run MultiQC and delete the symlinked AutoAnalysis jobs
 				runMultiQCEmailClients();
+				
+				createJiraTickets();
 
 				// Loop or exit?
 				if (hoursToWait == 0) return;
@@ -106,6 +115,62 @@ public class GNomExAutoAnalysis {
 		}
 	}
 
+	private void createJiraTickets() throws Exception{
+		Util.pl("Creating jira help request tickets...");
+		if (grsRequestingAnalysisAssistance.size()==0) return;
+		
+		//load prior made tickets
+		if (idsWithJiraTickets == null) idsWithJiraTickets = Util.loadFileIntoHashSet(builtJiraTickets);
+		HashSet<String> newIds = new HashSet<String>();
+		ArrayList<GNomExRequest> reqToTicket = new ArrayList<GNomExRequest>();
+		
+		//for each request see if it is new
+		for (GNomExRequest gr: grsRequestingAnalysisAssistance) {
+			String id = gr.getOriginalRequestId();
+			if (idsWithJiraTickets.contains(id) == false) {
+				newIds.add(id);
+				reqToTicket.add(gr);
+			}
+		}
+		
+		//combine and save the new ids overwriting the original file, use an intermediate
+		if (newIds.size()!=0) {
+			Util.pl("\tMaking "+newIds.size()+" jira tickets");
+			idsWithJiraTickets.addAll(newIds);
+			File temp = new File (builtJiraTickets.getCanonicalPath()+".tmp");
+			if (Util.writeHashSet(idsWithJiraTickets, temp) == false) throw new IOException("Failed to write the updated jira ticket id file. "+temp);
+			else if (temp.renameTo(builtJiraTickets) == false) throw new IOException("Failed to rename the updated jira ticket id file. "+temp);
+			
+			//make the tickets
+			for (GNomExRequest gr: reqToTicket) {
+				// write the json data file
+				File json = new File (hciTempDirectory, gr.getOriginalRequestId()+".tmp.json");
+				String data = gr.getJiraTicketData();
+				Util.writeString(data, json);
+				
+				// execute the curl cmd
+				String[] cmd = {"curl", "-D-", "-u", jiraApiCredentials, "-X", "POST", 
+						"--data", "@"+json.getCanonicalPath(), "-H", 
+						"Content-Type: application/json", jiraApiUrl};
+				
+
+				String[] results = Util.executeCommandLine(cmd);
+				
+				//check to see that a ticket was created
+				boolean ok = false;
+				for (String s: results) {
+					if (s.contains("BSD-") && s.contains("self")) {
+						ok = true;
+						if (verbose) Util.pl("\t"+ gr.getOriginalRequestId()+"\t"+s);
+						break;
+					}
+				}
+				if (ok == false) throw new IOException ("Failed to create a jira help ticket for "+data);
+				json.delete();
+			}
+		}
+	}
+
 	/*Sends an email that service is alive every 24hrs*/
 	private void emailAlive() {
 		hoursPassed += hoursToWait;
@@ -115,7 +180,7 @@ public class GNomExAutoAnalysis {
 			String subject = "GNomEx AutoAnalysis is alive "+Util.getDateTime();
 			String body = "\n"+jobsProcessed.size()+" jobs processed in the last 24hrs\n";
 			if (jobsProcessed.size()!=0) body = body + jobsProcessed;
-			Util.sendEmail(subject, adminEmail, body);
+			Util.sendEmail(subject, adminEmail, body, verbose);
 			jobsProcessed.clear();
 		}
 		
@@ -125,7 +190,7 @@ public class GNomExAutoAnalysis {
 		grsToBuildAutoAnalysis.clear();
 		grsWithAutoAnalysis.clear();
 		grsSkipped.clear();
-		grsOtherHelpRequests.clear();
+		grsRequestingAnalysisAssistance.clear();
 		grsToMultiQC.clear();
 		errorMessages.clear();
 	}
@@ -134,7 +199,7 @@ public class GNomExAutoAnalysis {
 		Util.pl("Emailing error messages...");
 		String subject = "GNomExAutoAnalysis ERROR";
 		String body = error+"\n"+e.toString();
-		Util.sendEmail(subject, adminEmail, body);
+		Util.sendEmail(subject, adminEmail, body, verbose);
 	}
 
 
@@ -157,11 +222,14 @@ public class GNomExAutoAnalysis {
 			String opts = orgLibWorkflowDocs.get(orgLib)[1].trim();
 			if (opts.toLowerCase().equals("none")) opts = "";
 			
+			// Current working directory, needed for multi qc config files if present
+			String workingDir = new File( System.getProperty("user.dir")).getCanonicalPath();
+			
 			StringBuilder sb = new StringBuilder();
 			// set to exit upon fail
 			sb.append("set -e\n");
 			// docker multiqc
-			sb.append("docker run --rm --user $(id -u):$(id -g) -v "+alignDir+":"+alignDir+
+			sb.append("docker run --rm --user $(id -u):$(id -g) -v "+alignDir+":"+alignDir+" -v "+workingDir+":"+workingDir+
 					" ewels/multiqc multiqc "+opts+" --outdir "+alignDir+"/MultiQC --title "+name+
 					" --filename "+name+"_MultiQCReport.html "+jobsDir+"\n");
 
@@ -201,9 +269,7 @@ public class GNomExAutoAnalysis {
 				+ "Browser configured AWS account, the files will be uploaded into it and then deleted. See:\n\t"+ dataPolicyUrl+ "\n\n");
 		sb.append("HCI Cancer Bioinformatics Shared Resource (CBI)\nhttps://huntsmancancer.org/cbi\n\n");
 
-Util.pl("\tEmailing ADMIN! Change back to client!");
-Util.sendEmail(subject, adminEmail, sb.toString());
-//Util.sendEmail(subject, gr.getRequestorEmail()+","+analysisReadyEmail, sb.toString());
+		Util.sendEmail(subject, gr.getRequestorEmail()+","+analysisReadyEmail, sb.toString(), verbose);
 		
 	}
 
@@ -263,6 +329,8 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 		for (GNomExRequest r: grsToBuildAutoAnalysis) {
 			boolean created = r.createAutoAnalysisJobs(hciLinkDirectory);
 			if (created == false) throw new IOException("Failed to create a AutoAnalysis job for "+r.getRequestIdCleaned());
+			//some samples may get skipped for lack of sufficient read depth
+			if (r.getErrorMessages()!= null && verbose) Util.pl("\tNon- fatal errors observed:\t"+r.getErrorMessages());
 		}
 	}
 
@@ -280,10 +348,10 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 			}
 			else if (verbose) Util.pl("\tSummary:\t"+r.simpleToString());
 			
-			//do they want alignment and qc?
-			if (r.getGenomeBuild().equals("NA")) {
-				grsOtherHelpRequests.add(r);
-				r.setErrorMessages("No genome build selected, skipping AutoAnalysis");
+			//do they just want analysis assistance and the Fastq is available
+//delete '&& r.getAnalysisNotes().equals("NA")==false' after db has settled
+			if (r.isAutoAnalyze() == false && r.isRequestBioinfoAssistance() == true && r.checkFastq() == true && r.getAnalysisNotes().equals("NA")==false) {
+				grsRequestingAnalysisAssistance.add(r);
 				if (verbose) Util.pl("\t"+ r.getErrorMessages());
 				continue;
 			}
@@ -306,6 +374,9 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 				if (r.checkForAutoAnalysis()) {
 					if (verbose) Util.pl("\tFound exiting AutoAnalysis dir");
 					grsWithAutoAnalysis.add(r);
+					//do they also want analysis assistance?
+//delete '&& r.getAnalysisNotes().equals("NA")==false' after db has settled
+					if (r.isRequestBioinfoAssistance() && r.getAnalysisNotes().equals("NA")==false) grsRequestingAnalysisAssistance.add(r);
 					continue;
 				}
 				//check fastq if AutoAnalysis not found
@@ -318,7 +389,6 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 
 				//run a bunch of other checks to see if an AutoAnalysis could be assembled
 				else {
-	
 					//is this a supported organism_libraryPrep?
 					String orgLib = r.getOrganism()+"_"+r.getLibraryPreparation();
 					if (orgLibWorkflowDocs.containsKey(orgLib)) {
@@ -328,12 +398,12 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 							if (r.checkR1R2FastqsPerSample()==false) {
 								r.setErrorMessages("For dnaAlignQC workflows, only fastq datasets with an _R1_ and _R2_ are supported, UMIs need custom analysis. Check all samples for just _R1_ and _R2_.");
 								grsSkipped.add(r);
-								grsOtherHelpRequests.add(r);
+								//also add to the AA in case they would like a custom manual analysis
+								grsRequestingAnalysisAssistance.add(r);
 								if (verbose) Util.pl("\t"+ r.getErrorMessages());
 								continue;
 							}
 						}
-						
 						if (verbose) Util.pl("\tReady for AutoAnalysis");
 						r.setWorkflowPaths(pathsMultiQCOptions[0]);
 						grsToBuildAutoAnalysis.add(r);
@@ -343,9 +413,10 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 						Integer count = molp.get(orgLib);
 						if (count == null) molp.put(orgLib, 1);
 						else molp.put(orgLib, count+1);
-						
-						grsSkipped.add(r);
 						r.setErrorMessages("Library Protocol not supported at this time, skipping AutoAnalysis ");
+						grsSkipped.add(r);
+						//also add to the AA in case they would like a custom manual analysis, fastq is ready at this point
+						grsRequestingAnalysisAssistance.add(r);
 						if (verbose) Util.pl("\t"+ r.getErrorMessages());
 					}
 				}
@@ -358,7 +429,7 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 		Util.pl("\t"+grsToBuildAutoAnalysis.size()+ "\tAutoAnalysis to run");
 		Util.pl("\t"+grsWithAutoAnalysis.size()+ "\tWith an existing AutoAnalysis");
 		Util.pl("\t"+grsSkipped.size()+ "\tSkipped");
-		Util.pl("\t"+grsOtherHelpRequests.size()+ "\tOthers with non AutoAnalysis help requests");
+		Util.pl("\t"+grsRequestingAnalysisAssistance.size()+ "\tWith custom help requests");
 	}
 
 
@@ -387,7 +458,7 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 			for (String olp: missingOrgLibPrep.keySet()) {
 				sb.append(missingOrgLibPrep.get(olp)); sb.append("\t"); sb.append(olp); sb.append("\n");
 			}
-			Util.sendEmail(subject, adminEmail, sb.toString());
+			Util.sendEmail(subject, adminEmail, sb.toString(), verbose);
 			Util.pl("\nNew unsupported organism : library prep kits found...");
 			Util.pl(sb);
 		}
@@ -431,24 +502,28 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 		//pull config file, a simple key value file that skips anything with #, splits on tab
 		if (configFile == null || configFile.canRead() == false) Util.printErrAndExit("Error: please provide a path to the AutoAnalysis configuration file.\n");
 
-		//check for the credential file for GNomEx db, this contains just the pw, read only account
-		if (credentialFile == null || credentialFile.canRead() == false) Util.printErrAndExit("Error: please provide a path to your GNomEx db credential file.\n");
+		//check for the credential file for GNomEx db and the Jira API
+		if (credentialFile == null || credentialFile.canRead() == false) Util.printErrAndExit("Error: please provide a path to your GNomEx db and Jira API credential file.\n");
 
 		//load and check the configSettings
 		loadConfiguration();
 		
 		loadSupportedWorkflows();
 		
-		addRealPwToConnectionUrl();
+		parseProcessCredentialsFile();
 
 
 	}	
 
-	private void addRealPwToConnectionUrl() throws IOException {
+	private void parseProcessCredentialsFile() throws IOException {
 		String[] pwLines = Util.loadFile(credentialFile);
-		if (pwLines == null || pwLines.length!=1) throw new IOException ("Failed to find a single line in "+ credentialFile);
+		if (pwLines == null || pwLines.length!=2) throw new IOException ("Failed to find two lines in "+ credentialFile);
+		// for GNomEx db
 		connectionUrl = connectionUrl.replace("XXXXXXXXXX", pwLines[0]);
 		if (connectionUrl.contains(pwLines[0])==false) throw new IOException ("Failed to find and or replace XXXXXXXXXX in "+ connectionUrl);
+		// for the Jira API,   userName:pw
+		jiraApiCredentials = pwLines[1];
+		if (jiraApiCredentials.contains(":")==false) throw new IOException ("Failed to find a ':' in the Jira API credentials line 2 in "+ credentialFile);
 	}
 
 	private void loadSupportedWorkflows() throws Exception {
@@ -459,14 +534,17 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 		String line;
 		
 		orgLibWorkflowDocs = new HashMap<String, String[]>();
-		
+		boolean errors = false;
 		while ((line = in.readLine())!=null) {
 			line = line.trim();
 			if (line.startsWith("#") || line.length()==0) continue;
 			//Organism   LibraryKit(s)   WFDirFile(s)   MultiQCOptions
 			//    0          1                2              3
 			fields = Util.TAB.split(line);
-			if (fields.length != 4) Util.pl("\tWARNING: missing fields, skipping -> "+line);
+			if (fields.length != 4) {
+				Util.pl("\tERROR: missing fields in workflow config line -> "+line);
+				errors = true;
+			}
 			else {
 				String[] libPreps = Util.SEMI_COLON_SPACE.split(fields[1]);
 				for (String lp: libPreps) {
@@ -477,6 +555,7 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 			}
 		}
 		in.close();
+		if (errors) throw new IOException();
 	}
 
 	private void loadConfiguration() {
@@ -491,9 +570,13 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 		experimentLinkUrl = configSettings.get("experimentLinkUrl");
 		if (experimentLinkUrl == null) Util.printErrAndExit("\nError: failed to find the 'experimentLinkUrl' key in "+ configFile);
 		
-		// jiraUrl
+		// jiraUrl for submitting help requests
 		jiraUrl = configSettings.get("jiraUrl");
-		if (jiraUrl == null) Util.printErrAndExit("\nError: failed to find the 'jiraUrl' key in "+ configFile);
+		if (jiraUrl == null) Util.printErrAndExit("\nError: failed to find the 'jiraUrl' help request link in "+ configFile);
+		
+		// jiraApiUrl for actually creating tickets via the api
+		jiraApiUrl = configSettings.get("jiraApiUrl");
+		if (jiraApiUrl == null) Util.printErrAndExit("\nError: failed to find the 'jiraApiUrl' key in "+ configFile);
 		
 		// dataPolicyUrl
 		dataPolicyUrl = configSettings.get("dataPolicyUrl");
@@ -524,13 +607,17 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 		experimentalSubDirs = Util.extractDirectories(ed);
 		if (experimentalSubDirs.containsKey("2023") == false) Util.printErrAndExit("\nError: failed to find the '2023' directory in "+ ed);
 
-			
-		//chpc
 		if (configSettings.containsKey("hciLinkDirectory") == false) Util.printErrAndExit("\nError: failed to find the 'hciLinkDirectory' key in "+ configFile);
 		hciLinkDirectoryString = configSettings.get("hciLinkDirectory");
 		if (hciLinkDirectoryString.endsWith("/")==false) hciLinkDirectoryString = hciLinkDirectoryString+"/";
 		hciLinkDirectory = new File (hciLinkDirectoryString);	
 		if (hciLinkDirectory.canWrite() == false) Util.printErrAndExit("\nError: cannot write to the 'hciLinkDirectory'"+ hciLinkDirectory);
+		
+		//temp dir for jira ticket creation, hciTempDirectory
+		if (configSettings.containsKey("hciTempDirectory") == false) Util.printErrAndExit("\nError: failed to find the 'hciTempDirectory' key in "+ configFile);
+		hciTempDirectory = new File (configSettings.get("hciTempDirectory"));
+		if (hciTempDirectory.exists() == false && hciTempDirectory.mkdirs() == false) Util.printErrAndExit("\nError: failed to find the 'hciTempDirectory' file in "+ configFile);
+
 		
 		//JobCleaner path command
 		if (configSettings.containsKey("useqJobCleaner") == false) Util.printErrAndExit("\nError: failed to find the 'useqJobCleaner' key in "+ configFile);
@@ -542,11 +629,15 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 		useqAggregateQCStats2 = new File (configSettings.get("useqAggregateQCStats2"));
 		if (useqAggregateQCStats2.exists() == false) Util.printErrAndExit("\nError: failed to find the 'useqAggregateQCStats2' app in "+ configFile);
 
-		
 		// supportedOrgLibWfConfigFile
 		if (configSettings.containsKey("supportedOrgLibWfConfigFile") == false) Util.printErrAndExit("\nError: failed to find the 'supportedOrgLibWfConfigFile' key in "+ configFile);
 		supportedOrgLibWfConfigFile = new File (configSettings.get("supportedOrgLibWfConfigFile"));
 		if (supportedOrgLibWfConfigFile.exists() == false) Util.printErrAndExit("\nError: failed to find the 'supportedOrgLibWfConfigFile' app in "+ configFile);
+		
+		//builtJiraTickets to avoid creating duplicate jira help tickets
+		if (configSettings.containsKey("builtJiraTickets") == false) Util.printErrAndExit("\nError: failed to find the 'builtJiraTickets' key in "+ configFile);
+		builtJiraTickets = new File (configSettings.get("builtJiraTickets"));
+		if (builtJiraTickets.exists() == false) Util.printErrAndExit("\nError: failed to find the 'builtJiraTickets' file specified in "+ configFile);
 		
 		
 		//print out settings
@@ -560,7 +651,9 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 				"\n  experimentLinkUrl\t"+ experimentLinkUrl+
 				"\n  experimentRequestsToProc\t"+ experimentRequestsToProc+
 				"\n  hciLinkDirectory\t"+ hciLinkDirectory+
+				"\n  hciTempDirectory\t"+ hciTempDirectory+
 				"\n  jiraUrl\t"+ jiraUrl+
+				"\n  jiraApiUrl\t"+ jiraApiUrl+
 				"\n  dataPolicyUrl\t"+ dataPolicyUrl+
 				"\n  supportedOrgLibWfConfigFile\t"+ supportedOrgLibWfConfigFile+
 				"\n  useqJobCleaner\t"+ useqJobCleaner+
@@ -573,9 +666,9 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 	public static void printDocs(){
 		Util.pl("\n" +
 				"**************************************************************************************\n" +
-				"**                           GNomEx Auto Analysis: March 2024                       **\n" +
+				"**                           GNomEx Auto Analysis: May 2024                         **\n" +
 				"**************************************************************************************\n" +
-				"GAA orchestrates setting up auto analysis jobs from GNomEx Experiment fastq. It looks\n"+
+				"GAA orchestrates setting up auto analysis jobs from GNomEx Experiment Fastq. It looks\n"+
 				"for ERs in the GNomEx db where the user has selected a genome build to align to,\n"+
 				"finds those with a match to the supported organisms and library types, assembles the\n"+
 				"directories, links in the fastq, and adds a RUNME file containing info for the\n "+
@@ -584,10 +677,11 @@ Util.sendEmail(subject, adminEmail, sb.toString());
 				"\nOptions:\n"+
 				"   -c Path to the AutoAnalysis configuration file.\n"+
 				"   -v Verbose debugging output.\n"+
-				"   -p Path to a file containing the GNomEx db user password.\n"+
+				"   -p Path to a file containing the GNomEx db user pw on line one and Jira API\n"+
+				"        userName:pw on line two.\n"+
 
 				"\nExample: java -jar -Xmx2G GNomExAutoAnalysis.jar -c autoAnalysis.config.txt -v -p \n"+
-				"               gnomExDb.cred.txt.\n\n"+
+				"               gnomExDbJiraApi.cred.txt.\n\n"+
 
 
 				"**************************************************************************************\n");

@@ -54,6 +54,8 @@ public class GNomExDbQuery {
 			
 			//query last 12 months, fastq is only guaranteed to be around for 6 months
 			if (verbose) Util.pl("Attempting query....");
+			
+			/*  Before GNomEx UI modifications
 			String SQL = "SELECT DISTINCT "+
 					"request.number,  "+				//0
 					"request.createDate,  "+			//1
@@ -77,6 +79,31 @@ public class GNomExDbQuery {
 					"AND (request.bioInformaticsAssist = 'Y' OR sequencelane.idGenomeBuildAlignTo IS NOT NULL) "+
 					"ORDER BY request.createDate; ";
 			int numReturnValues = 9;
+			*/
+			
+			String SQL = "SELECT DISTINCT "+
+					"request.number,  "+				//0
+					"request.createDate,  "+			//1
+					"appuser.email, "+					//2
+					"lab.lastname,  "+					//3
+					"lab.firstname,  "+					//4
+					"organism.organism, "+				//5
+					"application.application, "+		//7
+					"request.analysisInstructions, "+	//8   NA or freeform txt
+					"request.alignToGenomeBuild, "+     //9  NA, N, or Y
+					"request.bioInformaticsAssist "+    //10  N or Y
+					"FROM request  "+
+					"join project on project.idproject = request.idproject  "+
+					"join lab on lab.idlab = request.idlab  "+
+					"join sample on sample.idrequest = request.idrequest "+
+					"join organism on sample.idorganism = organism.idorganism "+
+					"join appuser on appuser.idappuser = request.idappuser  "+
+					"join application on application.codeapplication = request.codeapplication "+
+					"WHERE request.createDate > (select dateadd(month, -5, getdate())) "+
+					"AND (request.bioInformaticsAssist = 'Y' OR request.alignToGenomeBuild = 'Y') "+
+					"ORDER BY request.createDate; ";
+			int numReturnValues = 10;
+			
 			
 			stmt = con.createStatement();
 			rs = stmt.executeQuery(SQL);

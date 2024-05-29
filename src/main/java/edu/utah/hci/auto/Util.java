@@ -74,10 +74,13 @@ public class Util {
 		return exitCode;
 	}
 	
-	public static void sendEmail(String subject, String emailAddress, String body) {
+	public static void sendEmail(String subject, String emailAddress, String body, boolean verbose) {
 		try {
-			//sendmail 'david.austin.nix@gmail.com,david.nix@hci.utah.edu' < sm.txt
-			String message = "Subject: " +subject+ "\nFrom: noreply_auto_analysis@hci.utah.edu\n\n"+body+"\n";
+			//doesn't work anymore? WTH!! sendmail 'david.austin.nix@gmail.com,david.nix@hci.utah.edu' < sm.txt
+			//put email recipients in the txt file then: sendmail -t < sm.txt
+			String message = "Subject: " +subject+ 
+					"\nTo: "+emailAddress+
+					"\nFrom: noreply_auto_analysis@hci.utah.edu\n\n"+body+"\n";
 			File tmpDir = new File(System.getProperty("java.io.tmpdir"));
 			if (tmpDir.exists()==false) throw new Exception("ERROR: failed to find tmp dir. "+tmpDir);
 			File tmpFile = new File(tmpDir,"autoAnalysis."+ random.nextInt(10000)+ ".tmp.txt");
@@ -85,11 +88,13 @@ public class Util {
 			Util.writeString(message, tmpFile);
 
 			//execute via a shell script
-			String cmd = "sendmail '"+emailAddress+"' < "+tmpFile.getCanonicalPath();			
+			String cmd = "sendmail -t < "+tmpFile.getCanonicalPath();			
 			int exit = Util.executeShellScriptReturnExitCode(cmd, tmpDir);			
 			//this never happens?
 			if (exit != 0) throw new IOException ("Non zero exit code from: "+cmd);
-			//Util.pl("\nEmailing\n"+message+"\n"+cmd);
+			if (verbose) {
+				Util.pl("\nEmailing:"+subject+"\nCmd: '"+cmd+"\nTxtFile:\n'"+message+"'\n");
+			}
 		} catch (Exception e) {
 			pl("\nERROR: sending email "+e.getMessage()+"\n"+e.getStackTrace());
 		}
@@ -169,6 +174,41 @@ public class Util {
 		String[] strings = new String[a.size()];
 		a.toArray(strings);
 		return strings;
+	}
+	
+	/**Loads a file's lines into a hash set, keys only.*/
+	public static HashSet<String> loadFileIntoHashSet(File file){
+		HashSet<String> names = new HashSet<String>();
+		try{
+			BufferedReader in = fetchBufferedReader(file);
+			String line;
+			while ((line = in.readLine())!=null){
+				line = line.trim();
+				if (line.length() ==0) continue;
+				names.add(line);
+			}
+			in.close();
+		}catch(Exception e){
+			System.out.println("Prob loadFileInttoHash()");
+			e.printStackTrace();
+		}
+		return names;
+	}
+	
+	/**Writes each key tab value on a separate line to the file.*/
+	public static boolean writeHashSet(HashSet set, File file){
+		try{
+			PrintWriter out  = new PrintWriter(new FileWriter(file));
+			Iterator it = set.iterator();
+			while (it.hasNext()){
+				out.println(it.next());
+			}
+			out.close();
+		}catch (Exception e){
+			e.printStackTrace();
+			return false;
+		}
+		return true;	
 	}
 	
 	/**Returns a String separated by the separator given an ArrayList of objects.*/

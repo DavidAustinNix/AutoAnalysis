@@ -115,7 +115,7 @@ public class ChpcAutoAnalysis {
 			Util.pl("Emailing admin that daemon is running...");
 			String subject = "CHPC AutoAnalysis is alive "+Util.getDateTime();
 			String body = "\n"+jobsProcessed+" jobs processed in the last 24hrs\n";
-			Util.sendEmail(subject, adminEmail, body);
+			Util.sendEmail(subject, adminEmail, body, verbose);
 			jobsProcessed = 0;
 		}
 	}
@@ -125,7 +125,7 @@ public class ChpcAutoAnalysis {
 		Util.pl(printPrepend+ "Emailing error messages...");
 		String subject = "ChpcAutoAnalysis ERROR";
 		String body = Util.arrayListToString(errorMessages, "\n");
-		Util.sendEmail(subject, adminEmail, body);
+		Util.sendEmail(subject, adminEmail, body, verbose);
 	}
 
 	private void launchNewJobs() throws Exception {

@@ -1,5 +1,5 @@
 # Key TAB Value configuration file for the GNomEx and Chpc AutoAnalysis daemons
-# Last Edit 9 April 2024 - david.nix@hci.utah.edu
+# Last Edit 23 April 2024 - david.nix@hci.utah.edu
 
 ########## GNomExAutoAnalysis Specific ###########
 
@@ -18,13 +18,22 @@ experimentLinkUrl	https://hci-bio-app.hci.utah.edu/gnomex/?requestNumber=
 # Jira help request Url, this will be inserted into client email notifications
 jiraUrl	https://uofuhealth.utah.edu/huntsman/shared-resources/gcb/cbi/help-requests
 
+# Jira API URL for creating jira help request tickets
+jiraApiUrl	https://ri-jira.hci.utah.edu/rest/api/2/issue/
+
+# File to record which GNomEx IDs have had a Jira Help Request ticket created for them. It must exist but can be empty.
+builtJiraTickets	/home/tomatosrvs/AutoAnalysis/Test/builtJiraTickets.txt
+
+# CHPC temporary directory, used to write shell scripts to lauch slurm jobs
+hciTempDirectory	/home/tomatosrvs/AutoAnalysis/Test/TempDir
+
 # Data policy page Url
 dataPolicyUrl	https://uofuhealth.utah.edu/huntsman/shared-resources/gcb/cbi/data-access-storage
 
 # For testing just one Experiment Request, the GNomExAutoAnalysis will only process this request
 	# set to all or an actual xxxxxR ID
 testRequest	all
-	# testRequest	22680R
+#testRequest	24184R
 
 # Supported organisms library prep configuration file
 supportedOrgLibWfConfigFile	/home/tomatosrvs/AutoAnalysis/Test/autoAnalysis.wf.config.txt
@@ -36,8 +45,8 @@ useqJobCleaner	/home/tomatosrvs/AutoAnalysis/Test/USeq/Apps/JobCleaner
 useqAggregateQCStats2	/home/tomatosrvs/AutoAnalysis/Test/USeq/Apps/AggregateQCStats2
 
 # Email addresses to send new analysis alerts, e.g. for HTG
-# analysisReadyEmail	brian.dalley@hci.utah.edu,Opal.Allen@hci.utah.edu,david.nix@hci.utah.edu
-analysisReadyEmail	david.nix@hci.utah.edu
+analysisReadyEmail	brian.dalley@hci.utah.edu,Opal.Allen@hci.utah.edu,david.nix@hci.utah.edu
+# analysisReadyEmail	david.nix@hci.utah.edu
 
 
 ########## Used by Both ###########

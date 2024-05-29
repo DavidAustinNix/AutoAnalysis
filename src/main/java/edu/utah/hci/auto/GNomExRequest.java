@@ -1,5 +1,6 @@
 package edu.utah.hci.auto;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -16,9 +17,10 @@ public class GNomExRequest {
 	private String labGroupLastName;
 	private String labGroupFirstName;
 	private String organism;
-	private String genomeBuild;
 	private String libraryPreparation;
 	private String analysisNotes;
+	private boolean autoAnalyze;
+	private boolean requestBioinfoAssistance;
 	
 	private File requestDirectory = null;
 	private File[] fastqFiles = null;
@@ -38,13 +40,14 @@ public class GNomExRequest {
 		originalRequestId = fields[0];
 		
 		creationDate = fields[1];
-		requestorEmail = fields[2];
+		requestorEmail = fields[2].trim();
 		labGroupLastName = fields[3];
 		labGroupFirstName = fields[4];
 		organism = fields[5].trim();
-		genomeBuild = fields[6];
-		libraryPreparation = fields[7].trim();
-		analysisNotes = fields[8];
+		libraryPreparation = fields[6].trim();
+		analysisNotes = fields[7].trim();
+		autoAnalyze = fields[8].contains("Y");
+		requestBioinfoAssistance = fields[9].contains("Y");
 	}
 	
 	public String toString() {
@@ -61,7 +64,6 @@ public class GNomExRequest {
 		sb.append(originalRequestId); sb.append("\t");
 		sb.append(creationDate); sb.append("\t");
 		sb.append(organism); sb.append("\t");
-		sb.append(genomeBuild); sb.append("\t");
 		sb.append(libraryPreparation);
 		return sb.toString();
 	}
@@ -106,6 +108,16 @@ public class GNomExRequest {
 						else throw new IOException ("FAILED to find at least 5 _ separated name elements in "+f.getName());
 					}
 				}
+				//check they have sufficient number of reads, just skip the particular job since the others are probably OK
+				boolean fileCountOK = checkFastqsHaveSufficientReads(toLink);
+				if (fileCountOK == false) {
+					String message = "Skipping "+sampleId+", one or more of the fastq files did not have sufficient reads.";
+					if (errorMessages == null) errorMessages = message;
+					else errorMessages = errorMessages+"; "+message;
+					continue;
+				}
+				
+				
 				Util.createSymbolicLinks(toLink, subDir);
 				String sampleNames= Util.stringHashToString(sampleRepeats, ",");
 				
@@ -119,7 +131,6 @@ public class GNomExRequest {
 						"sampleNames\t"+sampleNames+
 						"\nworkflowPaths\t"+workflowPaths+
 						"\norganism\t"+ organism+
-						"\ngenomeBuild\t"+genomeBuild+
 						"\nlibraryPrep\t"+libraryPreparation+"\n";
 				Util.writeString(runMe, new File(subDir, "RUNME"));
 			} 
@@ -161,6 +172,23 @@ public class GNomExRequest {
 				if (r1!=1 || r2!=1) return false;
 			}
 			return true;
+	}
+	
+	/**Returns false if all of the fastqs don't have at least the minimumFastqCount.
+	 * @throws IOException */
+	public boolean checkFastqsHaveSufficientReads(ArrayList<File> fastqFiles) throws IOException {
+		for (File f: fastqFiles) {
+			int lineCount = 0;
+			String line = null;
+			BufferedReader in = Util.fetchBufferedReader(f);
+			while ((line = in.readLine()) !=null) {
+				lineCount++;
+				if (lineCount >= GNomExAutoAnalysis.minimumFastqFileLineCount) break;
+			}
+			in.close();
+			if (lineCount < GNomExAutoAnalysis.minimumFastqFileLineCount) return false;	
+		}
+		return true;
 	}
 
 	
@@ -205,6 +233,48 @@ public class GNomExRequest {
 		for (File f: fastqFiles) if ((currentTime - f.lastModified())<0) return false;
 		return true;
 	}
+	
+	public String getJiraTicketData() {
+		/*
+		{"fields": {"project": {"id": "14900"},
+		"summary": "Testing Jira API - IGNORE - 2",
+		"description": "Creating of an issue using IDs for projects and issue types using the REST API",
+		"customfield_21408": "123456R",
+		"customfield_11801": "Eric Jackson Lab",
+		"issuetype": {"id": "12700"}}}
+		 */
+		String labGroup = labGroupLastName+", "+labGroupFirstName;
+		
+		String sum = requestorEmail+" - "+labGroup+" - "+libraryPreparation+" - "+requestIdCleaned;
+		
+		StringBuilder desc = new StringBuilder("GNomEx LIMS Analysis Request");
+		desc.append("\\nRequestor:\\t"); desc.append(requestorEmail);
+		desc.append("\\nOrganism:\\t"); desc.append( organism);
+		desc.append("\\nLibraryPrep:\\t"); desc.append( libraryPreparation);
+		desc.append("\\nCreationDate:\\t"); desc.append( creationDate);
+		desc.append("\\nRequestingAutoAnalysis:\\t"); desc.append(autoAnalyze);
+		if (autoAnalysisMainDirectory != null) {
+			desc.append("\\nAutoAnalysisDir:\\t"); 
+			desc.append(autoAnalysisMainDirectory.getName());
+		}
+		
+		desc.append("\\nRequestingAnalysisAssistance:\\t"); desc.append(requestBioinfoAssistance);
+		if (errorMessages!=null) {
+			desc.append("\\nIssues/Errors:\\t"); 
+			desc.append(errorMessages);
+		}
+		if (analysisNotes.equals("NA")==false) {
+			desc.append("\\nAnalysisNotes:\\n"); 
+			desc.append(analysisNotes.replaceAll("\"", "'"));
+		}
+		StringBuilder sb = new StringBuilder("{\"fields\": {\"project\": {\"id\": \"14900\"},\n");
+		sb.append("\"summary\": \""+sum+"\",\n");
+		sb.append("\"description\": \""+desc+"\",\n");
+		sb.append("\"customfield_21408\": \""+requestIdCleaned +"\",\n");
+		sb.append("\"customfield_11801\": \""+labGroup+"\",\n");
+		sb.append("\"issuetype\": {\"id\": \"12700\"}}}\n");
+		return sb.toString();
+	}
 
 	public String getRequestIdCleaned() {
 		return requestIdCleaned;
@@ -228,10 +298,6 @@ public class GNomExRequest {
 
 	public String getOrganism() {
 		return organism;
-	}
-
-	public String getGenomeBuild() {
-		return genomeBuild;
 	}
 
 	public String getLibraryPreparation() {
@@ -286,7 +352,11 @@ public class GNomExRequest {
 		this.workflowPaths = workflowPaths;
 	}
 
+	public boolean isAutoAnalyze() {
+		return autoAnalyze;
+	}
 
-
-
+	public boolean isRequestBioinfoAssistance() {
+		return requestBioinfoAssistance;
+	}
 }
