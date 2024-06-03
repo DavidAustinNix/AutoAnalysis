@@ -201,8 +201,7 @@ public class GNomExAutoAnalysis {
 		String body = error+"\n"+e.toString();
 		Util.sendEmail(subject, adminEmail, body, verbose);
 	}
-
-
+	
 	private void runMultiQCEmailClients() throws IOException {
 		// Any jobs?
 		if (grsToMultiQC.size() ==0) return;
@@ -276,46 +275,75 @@ public class GNomExAutoAnalysis {
 	private void checkExistingAutoAnalysis() throws Exception{
 		// Any jobs?
 		if (grsWithAutoAnalysis.size() ==0) return;
-		
+
 		Util.pl("\nChecking AutoAnalysis jobs...");
 		for (GNomExRequest gr: grsWithAutoAnalysis) {
+
+			File oldAADir = gr.getAutoAnalysisMainDirectory();
 			
-			//Is it all complete? e.g. MultiQC has run and the symlinked dirs are removed
-			File complete = new File (gr.getAutoAnalysisMainDirectory(), "COMPLETE");
-			File mqc = new File (gr.getAutoAnalysisMainDirectory(), "MultiQC");
-			if (complete.exists() || mqc.exists()) {
-				if (verbose) Util.pl("\tCOMPLETE\t"+ gr.getAutoAnalysisMainDirectory());
-				continue;
+			//any Fastq? Might be archived
+			boolean fastqOK = gr.checkFastq();
+			if (fastqOK == false) {
+				if (verbose) Util.pl("\t\tFastq check failed, archived? leaving as COMPLETE\t"+ oldAADir);
 			}
-			
-			
-			//OK, check sub directories
-			if (verbose) Util.pl("\t"+ gr.getAutoAnalysisJobsDirectory());
-			File[] jobs = Util.extractOnlyDirectories(gr.getAutoAnalysisJobsDirectory());
-			
-			boolean allComplete = true;
-			for (File jobDir: jobs) {
-				File comp = new File(jobDir, "COMPLETE");
-				//the only jobs copied back will have a COMPLETE, otherwise they are waiting on CHPC
-				if (comp.exists() == false) {
-					allComplete = false; 
-					if (verbose) Util.pl("\t\tWAITING ON\t"+jobDir.getName());
-				}
-				else if (verbose) Util.pl("\t\tCOMPLETE\t"+jobDir.getName());
-			}
-			
-			//setup for multi qc?
-			if (allComplete) {
-				grsToMultiQC.add(gr);
-				for (File jobDir: jobs) {
-					String symLinkName = hciLinkDirectoryString+jobDir.getName();
-					Path sl = Paths.get(symLinkName);
-					if(Files.exists(sl)) {
-						//Delete symlinked job dirs
-						if (verbose) Util.pl("\t\tDeleting symlinked job dir\t"+symLinkName);
-						Files.delete(sl);
+			else {
+
+				//Is it all complete? e.g. MultiQC has run and the symlinked dirs are removed
+				File complete = new File (gr.getAutoAnalysisMainDirectory(), "COMPLETE");
+				File mqc = new File (gr.getAutoAnalysisMainDirectory(), "MultiQC");
+				if (complete.exists() || mqc.exists()) {
+
+					//check number of jobs and number of fastq samples, HTG sometimes adds new Fastq to the old analysis folder, ugg!			
+					if (fastqOK) {
+						int numJobs = gr.getJobs().length;
+						int numFastqSamples = gr.getNumberFastqSampleNames();			
+						if (numFastqSamples > 0 && numJobs != numFastqSamples) {
+							if (verbose) Util.pl("\tNew Fastq found, depreciating\t"+ oldAADir);
+							//rename the AutoAnalysis folder so this gets run again on the next check
+							File dep = new File (oldAADir.getParentFile(), "Depreciated_"+oldAADir.getName());
+							boolean renamed = oldAADir.renameTo(dep);
+							if (renamed == false) throw new IOException("FAILED to rename "+oldAADir.getName()+" to "+dep.getName());
+						}
+						else if (verbose) Util.pl("\tCOMPLETE\t"+ oldAADir);
 					}
-					jobsProcessed.add(jobDir.getName());
+					else if (verbose) Util.pl("\tFastq check failed so leave COMPLETE\t"+ oldAADir);
+
+					continue;
+				}
+				
+
+				//OK, check Jobs directories, might be user deleted, if a run is in progress there will the a Jobs/ dir and one or more subdirs
+				if (verbose) Util.pl("\t"+ gr.getOriginalRequestId()+ "\t"+ gr.getAutoAnalysisJobsDirectory());
+				File[] jobs = gr.getJobs();
+				if (gr.getAutoAnalysisJobsDirectory() == null || jobs.length < 1) {
+					if (verbose) Util.pl("\tJobs dir check failed so leave COMPLETE\t"+ oldAADir);
+					continue;
+				}
+
+				boolean allComplete = true;
+				for (File jobDir: jobs) {
+					File comp = new File(jobDir, "COMPLETE");
+					//the only jobs copied back will have a COMPLETE, otherwise they are waiting on CHPC
+					if (comp.exists() == false) {
+						allComplete = false; 
+						if (verbose) Util.pl("\t\tWAITING ON\t"+jobDir.getName());
+					}
+					else if (verbose) Util.pl("\t\tCOMPLETE\t"+jobDir.getName());
+				}
+
+				//setup for multi qc?
+				if (allComplete) {
+					grsToMultiQC.add(gr);
+					for (File jobDir: jobs) {
+						String symLinkName = hciLinkDirectoryString+jobDir.getName();
+						Path sl = Paths.get(symLinkName);
+						if(Files.exists(sl)) {
+							//Delete symlinked job dirs
+							if (verbose) Util.pl("\t\tDeleting symlinked job dir\t"+symLinkName);
+							Files.delete(sl);
+						}
+						jobsProcessed.add(jobDir.getName());
+					}
 				}
 			}
 		}
@@ -370,9 +398,11 @@ public class GNomExAutoAnalysis {
 			}
 			else {
 				r.setRequestDirectory(requestDirOnRepo);
+				
 				//check for AutoAnalysis
 				if (r.checkForAutoAnalysis()) {
 					if (verbose) Util.pl("\tFound exiting AutoAnalysis dir");
+						
 					grsWithAutoAnalysis.add(r);
 					//do they also want analysis assistance?
 //delete '&& r.getAnalysisNotes().equals("NA")==false' after db has settled

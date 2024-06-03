@@ -24,8 +24,10 @@ public class GNomExRequest {
 	
 	private File requestDirectory = null;
 	private File[] fastqFiles = null;
+	private int numberFastqSampleNames = -1;
 	private File autoAnalysisMainDirectory = null;
 	private File autoAnalysisJobsDirectory = null;
+	private File[] jobs = null;
 	
 	/*Semi-colon space delimited, full path, on Redwood, if a dir the contents will be copied into each job.*/
 	private String workflowPaths = null;
@@ -174,6 +176,18 @@ public class GNomExRequest {
 			return true;
 	}
 	
+	public int countNumberFastqSamples() {
+		//21369X1_20231010_LH00227_0016_B227FWCLT3_S15_L001_R1_001.fastq.gz
+		HashSet<String> sampleFastqs = new HashSet<String>();
+		String fileName = null;
+		for (File f: fastqFiles) {
+			fileName = f.getName();
+			String[] split = Util.UNDERSCORE.split(fileName);
+			sampleFastqs.add(split[0]);
+		}
+		return sampleFastqs.size();
+	}
+	
 	/**Returns false if all of the fastqs don't have at least the minimumFastqCount.
 	 * @throws IOException */
 	public boolean checkFastqsHaveSufficientReads(ArrayList<File> fastqFiles) throws IOException {
@@ -210,13 +224,19 @@ public class GNomExRequest {
 		}
 		//any Jobs directory?
 		File jd = new File(autoAnalysisMainDirectory, "Jobs");
-		if (jd.exists()) autoAnalysisJobsDirectory = jd;
+		if (jd.exists()) {
+			autoAnalysisJobsDirectory = jd;
+			jobs = Util.extractOnlyDirectories(jd);
+		}
+		
 		return true;
 	}
 	
 	public boolean checkFastq() {
+
 		File fastqDirectory = new File(requestDirectory, "Fastq");
 		if (fastqDirectory.exists() == false) return false;
+
 		//contains a file with md5 in the name
 		File[] allFiles = Util.extractFiles(fastqDirectory);
 		boolean foundMd5 = false;
@@ -227,10 +247,20 @@ public class GNomExRequest {
 			}
 		}
 		if (foundMd5 == false) return false;
+
 		//find the fastq files and check they are all at least 1 hour old, want to avoid jobs in transfer from demuxing
 		fastqFiles = Util.fetchFilesRecursively(fastqDirectory, "q.gz");
+		
+		//any fastqs? might be deleted
+		if (fastqFiles.length == 0) return false;
+		
+		//check age, don't want to work on very recent fastqs since these might be in process of being copied over from demux
 		long currentTime = System.currentTimeMillis() - 3600000;
 		for (File f: fastqFiles) if ((currentTime - f.lastModified())<0) return false;
+		
+		//count fastq sample names
+		numberFastqSampleNames = countNumberFastqSamples();
+		
 		return true;
 	}
 	
@@ -358,5 +388,13 @@ public class GNomExRequest {
 
 	public boolean isRequestBioinfoAssistance() {
 		return requestBioinfoAssistance;
+	}
+
+	public File[] getJobs() {
+		return jobs;
+	}
+
+	public int getNumberFastqSampleNames() {
+		return numberFastqSampleNames;
 	}
 }
