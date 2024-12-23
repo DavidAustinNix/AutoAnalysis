@@ -1,5 +1,5 @@
 # Key TAB Value configuration file for the GNomEx and Chpc AutoAnalysis daemons
-# Last Edit 23 April 2024 - david.nix@hci.utah.edu
+# Last Edit 23 Dec 2024 - david.nix@hci.utah.edu
 
 ########## GNomExAutoAnalysis Specific ###########
 
@@ -23,6 +23,9 @@ jiraApiUrl	https://ri-jira.hci.utah.edu/rest/api/2/issue/
 
 # File to record which GNomEx IDs have had a Jira Help Request ticket created for them. It must exist but can be empty.
 builtJiraTickets	/home/tomatosrvs/AutoAnalysis/Test/builtJiraTickets.txt
+
+# File to record GNomEx SampleIDs and species for demux ORA configuration. It doesn't have to exist, must be able to write to the parent dir.
+sampleSpeciesFile	/home/tomatosrvs/AutoAnalysis/Test/sampleSpeciesForORA.txt
 
 # CHPC temporary directory, used to write shell scripts to lauch slurm jobs
 hciTempDirectory	/home/tomatosrvs/AutoAnalysis/Test/TempDir

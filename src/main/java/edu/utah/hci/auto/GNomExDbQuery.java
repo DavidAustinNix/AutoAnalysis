@@ -14,6 +14,7 @@ public class GNomExDbQuery {
 	private Statement stmt = null;
 	private ResultSet rs = null;
 	private GNomExRequest[] requests = null;
+	private GNomExSample[] samples = null;
 	private boolean failed = false;
 	private boolean verbose = true;
 
@@ -22,8 +23,7 @@ public class GNomExDbQuery {
 		this.verbose = verbose;
 		
 		try {
-			runQuery();
-			
+			runQueries();
 		} catch (Exception e) {
 			failed = true;
 			e.printStackTrace();
@@ -40,67 +40,108 @@ public class GNomExDbQuery {
 		int num = requestsAl.size();
 		for (int i=0; i< num; i++) requests[i] = new GNomExRequest(requestsAl.get(i));
 	}
+	
+	public void runQueries() throws Exception {
+		if (verbose) Util.pl("Instantiating a driver...");
+		Driver d = (Driver) Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver").newInstance();
+		if (verbose) Util.pl("\tDriver "+d);
 
-	public void runQuery() throws Exception {
-			if (verbose) Util.pl("Instantiating a driver...");
-			Driver d = (Driver) Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver").newInstance();
-			if (verbose) Util.pl("\tDriver "+d);
-
-			//establish connection
-			if (verbose) Util.pl("Attempting to make a connection...");
-			Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver");
-			con = DriverManager.getConnection(connectionUrl);
-			
-			//query last 12 months, fastq is only guaranteed to be around for 6 months
-			if (verbose) Util.pl("Attempting query....");
-			
-			
-			String SQL = "SELECT DISTINCT "+
-					"request.number,  "+				//0
-					"request.createDate,  "+			//1
-					"appuser.email, "+					//2
-					"lab.lastname,  "+					//3
-					"lab.firstname,  "+					//4
-					"organism.organism, "+				//5
-					"application.application, "+		//7
-					"request.analysisInstructions, "+	//8   NA or freeform txt
-					"request.alignToGenomeBuild, "+     //9  NA, N, or Y
-					"request.bioInformaticsAssist, "+   //10  N or Y
-					"request.codeRequestStatus "+       //11
-					"FROM request  "+
-					"join project on project.idproject = request.idproject  "+
-					"join lab on lab.idlab = request.idlab  "+
-					"join sample on sample.idrequest = request.idrequest "+
-					"join organism on sample.idorganism = organism.idorganism "+
-					"join appuser on appuser.idappuser = request.idappuser  "+
-					"join application on application.codeapplication = request.codeapplication "+
-					"WHERE request.createDate > (select dateadd(month, -12, getdate())) "+
-					"AND (request.bioInformaticsAssist = 'Y' OR request.alignToGenomeBuild = 'Y') "+
-					"ORDER BY request.createDate; ";
-			//"AND request.codeRequestStatus = 'COMPLETE' "+
-			
-			int numReturnValues = 11;
-			
-			
-			stmt = con.createStatement();
-			rs = stmt.executeQuery(SQL);
-			if (verbose) Util.pl("Loading results...");
-			ArrayList<String[]> requestsAl = new ArrayList<String[]>();
-			while (rs.next()) {
-				String[] results = new String[numReturnValues];
-				int resultsIndex = 0;
-				for (int i=1; i<numReturnValues+1; i++) {
-					String val = rs.getString(i);
-					if (val != null) results[resultsIndex++] = val.trim();
-					else results[resultsIndex++] = "NA";
-				}
-				requestsAl.add(results);
-//Util.pl(Util.stringArrayToString(results, "\n")+"\n");
+		//establish connection
+		if (verbose) Util.pl("Attempting to make a connection...");
+		Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver");
+		con = DriverManager.getConnection(connectionUrl);
+		
+		//query last 12 months, fastq is only guaranteed to be around for 3 months
+		if (verbose) Util.pl("Attempting query for AutoAnalysis....");
+		runAutoAnalysisQuery(d, con);
+		
+		if (verbose) Util.pl("Attempting query for Species Demux....");
+		runSpeciesQuery(d, con);
+}
+	private void runSpeciesQuery(Driver d, Connection con) throws Exception{
+		
+		String SQL = "SELECT DISTINCT request.number, sample.number, organism.organism, request.createDate "+
+		"FROM request "+
+		"join project on project.idproject = request.idproject "+
+		"join sample on sample.idrequest = request.idrequest "+
+		"join organism on sample.idorganism = organism.idorganism "+
+		"WHERE request.createDate > (select dateadd(month, -12, getdate())) ORDER BY request.createDate;";
+		
+		int numReturnValues = 4;
+		
+		stmt = con.createStatement();
+		rs = stmt.executeQuery(SQL);
+		if (verbose) Util.pl("Loading results...");
+		ArrayList<GNomExSample> requestsAl = new ArrayList<GNomExSample>();
+		while (rs.next()) {
+			String[] results = new String[numReturnValues];
+			int resultsIndex = 0;
+			for (int i=1; i<numReturnValues+1; i++) {
+				String val = rs.getString(i);
+				if (val != null) results[resultsIndex++] = val.trim();
+				else results[resultsIndex++] = "NA";
 			}
-			
-			parseRequests(requestsAl);
-			
+			requestsAl.add(new GNomExSample(results));
+			//Util.pl(Util.stringArrayToString(results, "\t"));
+		}
+		
+		samples = new GNomExSample[requestsAl.size()];
+		requestsAl.toArray(samples);
+		
+	}
 
+
+	private void runAutoAnalysisQuery(Driver d, Connection con) throws Exception{
+		String SQL = "SELECT DISTINCT "+
+				"request.number,  "+				//0
+				"request.createDate,  "+			//1
+				"appuser.email, "+					//2
+				"lab.lastname,  "+					//3
+				"lab.firstname,  "+					//4
+				"organism.organism, "+				//5
+				"application.application, "+		//7
+				"request.analysisInstructions, "+	//8   NA or freeform txt
+				"request.alignToGenomeBuild, "+     //9  NA, N, or Y
+				"request.bioInformaticsAssist, "+   //10  N or Y
+				"request.codeRequestStatus "+       //11
+				"FROM request  "+
+				"join project on project.idproject = request.idproject  "+
+				"join lab on lab.idlab = request.idlab  "+
+				"join sample on sample.idrequest = request.idrequest "+
+				"join organism on sample.idorganism = organism.idorganism "+
+				"join appuser on appuser.idappuser = request.idappuser  "+
+				"join application on application.codeapplication = request.codeapplication "+
+				"WHERE request.createDate > (select dateadd(month, -12, getdate())) "+
+				"AND (request.bioInformaticsAssist = 'Y' OR request.alignToGenomeBuild = 'Y') "+
+				"ORDER BY request.createDate; ";
+		//"AND request.codeRequestStatus = 'COMPLETE' "+
+		
+		int numReturnValues = 11;
+		
+		stmt = con.createStatement();
+		rs = stmt.executeQuery(SQL);
+		if (verbose) Util.pl("Loading results...");
+		ArrayList<String[]> requestsAl = new ArrayList<String[]>();
+		while (rs.next()) {
+			String[] results = new String[numReturnValues];
+			int resultsIndex = 0;
+			for (int i=1; i<numReturnValues+1; i++) {
+				String val = rs.getString(i);
+				if (val != null) results[resultsIndex++] = val.trim();
+				else results[resultsIndex++] = "NA";
+			}
+			requestsAl.add(results);
+			//Util.pl(Util.stringArrayToString(results, "\n")+"\n");
+		}
+		
+		parseRequests(requestsAl);
+		
+	}
+
+	public static void main (String[] args) {
+		//replace xxxxx pwd from https://ri-confluence.hci.utah.edu/pages/viewpage.action?pageId=38076459
+		String connectionUrl = "jdbc:sqlserver://hci-db.hci.utah.edu:1433;databaseName=gnomex;user=pipeline;password=XXXXXX;encrypt=true;trustServerCertificate=true";
+		new GNomExDbQuery(connectionUrl, true);
 	}
 
 	public GNomExRequest[] getRequests() {
@@ -109,6 +150,10 @@ public class GNomExDbQuery {
 
 	public boolean isFailed() {
 		return failed;
+	}
+
+	public GNomExSample[] getSamples() {
+		return samples;
 	}
 
 }

@@ -2,7 +2,9 @@ package edu.utah.hci.auto;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -48,6 +50,7 @@ public class GNomExAutoAnalysis {
 	private String dataPolicyUrl = null;
 	private String experimentRequestsToProc = null;
 	private String jiraApiCredentials = null;
+	private File sampleSpeciesFile = null;
 	
 	//internal fields
 	//Date formatting, 2023-11-14 07:43:13.38
@@ -82,6 +85,9 @@ public class GNomExAutoAnalysis {
 				Util.pl("\nChecking the GNomEx db...");
 				GNomExDbQuery dbQuery = new GNomExDbQuery(connectionUrl, verbose);
 				if (dbQuery.isFailed()) throw new Exception("ERROR with querying the GNomEx DB");
+				
+				// Save sample species for demux ORA compression
+				parseSampleSpecies(dbQuery.getSamples());
 
 				// Find new requests ready for analysis, find existing analysis jobs and check their status
 				parseRequests(dbQuery.getRequests());
@@ -112,6 +118,20 @@ public class GNomExAutoAnalysis {
 			emailErrorMessage("FATAL: GNomExAutoAnalysis terminated, daemon offline! Check HCI run log.\n", e);
 			e.printStackTrace();
 			System.exit(1);
+		}
+	}
+
+	private void parseSampleSpecies(GNomExSample[] samples) throws Exception{
+		Util.pl("Writing out new SampleID Species file for ORA...");
+		//write out new tmp sample file
+		File tmpSamples = new File(sampleSpeciesFile.getParent(), "tmp_"+sampleSpeciesFile.getName());
+		PrintWriter out = new PrintWriter( new FileWriter(tmpSamples));
+		out.println("#ExperimentID\tSampleID\tSpecies\tCreationDate");
+		for (GNomExSample s: samples) out.println(s.toString());
+		out.close();
+		//copy it to the real location
+		if (tmpSamples.renameTo(sampleSpeciesFile) == false) {
+			throw new Exception("Error: failed to copy tmp sample species file "+tmpSamples+" to "+sampleSpeciesFile);
 		}
 	}
 
@@ -232,6 +252,8 @@ public class GNomExAutoAnalysis {
 					" ewels/multiqc multiqc "+opts+" --outdir "+alignDir+"/MultiQC --title "+name+
 					" --filename "+name+"_MultiQCReport.html "+jobsDir+"\n");
 
+			// CellRanger ATAC is not supported by the cellranger module so don't use it!
+			
 			// dnaAlign?
 			// fetch all of the sing files these will contain the name of the workflow, e.g. dnaAlignQC.sing
 			ArrayList<File> singFiles = Util.fetchAllFilesRecursively(new File(jobsDir), ".sing");
@@ -265,7 +287,7 @@ public class GNomExAutoAnalysis {
 		sb.append("Access these via:\n\t"+experimentLinkUrl+ gr.getOriginalRequestId()+ "\n\tand look in the  '"+gr.getAutoAnalysisMainDirectory().getName()+"'  directory.\n\n");
 		sb.append("If you would like additional analysis assistance, submit a help request through our Jira ticketing system:\n\t"+ jiraUrl+"\n\n");
 		sb.append("Lastly, remember that all of the data files in this Experiment Request will be deleted after six months. If your group has a CORE "
-				+ "Browser configured AWS account, the files will be uploaded into it and then deleted. See:\n\t"+ dataPolicyUrl+ "\n\n");
+				+ "Browser configured AWS account (https://hci-apps-ext.hci.utah.edu/core-browser), the files will be uploaded into it and then deleted. See:\n\t"+ dataPolicyUrl+ "\n\n");
 		sb.append("HCI Cancer Bioinformatics Shared Resource (CBI)\nhttps://huntsmancancer.org/cbi\n\n");
 
 		Util.sendEmail(subject, gr.getRequestorEmail()+","+analysisReadyEmail, sb.toString(), verbose);
@@ -293,8 +315,9 @@ public class GNomExAutoAnalysis {
 				File mqc = new File (gr.getAutoAnalysisMainDirectory(), "MultiQC");
 				if (complete.exists() || mqc.exists()) {
 
-					//check number of jobs and number of fastq samples, HTG sometimes adds new Fastq to the old analysis folder, ugg!			
-					if (fastqOK) {
+					//check number of jobs and number of fastq samples, HTG sometimes adds new Fastq to the old analysis folder, ugg!
+					//people also delete the Jobs dir
+					if (fastqOK && gr.getJobs()!=null) {
 						int numJobs = gr.getJobs().length;
 						int numFastqSamples = gr.getNumberFastqSampleNames();			
 						if (numFastqSamples > 0 && numJobs != numFastqSamples) {
@@ -306,7 +329,7 @@ public class GNomExAutoAnalysis {
 						}
 						else if (verbose) Util.pl("\tCOMPLETE\t"+ oldAADir);
 					}
-					else if (verbose) Util.pl("\tFastq check failed so leave COMPLETE\t"+ oldAADir);
+					else if (verbose) Util.pl("\tFastq or Jobs check failed so leave COMPLETE\t"+ oldAADir);
 
 					continue;
 				}
@@ -315,7 +338,7 @@ public class GNomExAutoAnalysis {
 				//OK, check Jobs directories, might be user deleted, if a run is in progress there will the a Jobs/ dir and one or more subdirs
 				if (verbose) Util.pl("\t"+ gr.getOriginalRequestId()+ "\t"+ gr.getAutoAnalysisJobsDirectory());
 				File[] jobs = gr.getJobs();
-				if (gr.getAutoAnalysisJobsDirectory() == null || jobs.length < 1) {
+				if (gr.getAutoAnalysisJobsDirectory() == null || jobs == null || jobs.length < 1) {
 					if (verbose) Util.pl("\tJobs dir check failed so leave COMPLETE\t"+ oldAADir);
 					continue;
 				}
@@ -426,7 +449,7 @@ public class GNomExAutoAnalysis {
 						//check fastq for dnaAlignQC?
 						if (pathsMultiQCOptions[0].contains(dnaAlignQCWFName)) {
 							if (r.checkR1R2FastqsPerSample()==false) {
-								r.setErrorMessages("For dnaAlignQC workflows, only fastq datasets with an _R1_ and _R2_ are supported, UMIs need custom analysis. Check all samples for just _R1_ and _R2_.");
+								r.setErrorMessages("For dnaAlignQC workflows, only fastq datasets with _R1_s and _R2_s are supported, UMIs need custom analysis. Check all samples for just _R1_s and _R2_s.");
 								grsSkipped.add(r);
 								//also add to the AA in case they would like a custom manual analysis
 								grsRequestingAnalysisAssistance.add(r);
@@ -669,6 +692,16 @@ public class GNomExAutoAnalysis {
 		builtJiraTickets = new File (configSettings.get("builtJiraTickets"));
 		if (builtJiraTickets.exists() == false) Util.printErrAndExit("\nError: failed to find the 'builtJiraTickets' file specified in "+ configFile);
 		
+		// sampleSpeciesFile for demux ORA
+		if (configSettings.containsKey("sampleSpeciesFile") == false) Util.printErrAndExit("\nError: failed to find the 'sampleSpeciesFile' key in "+ configFile);
+		sampleSpeciesFile = new File (configSettings.get("sampleSpeciesFile"));
+		try {
+			if (sampleSpeciesFile.exists() == false) sampleSpeciesFile.createNewFile();
+			if (sampleSpeciesFile.getParentFile().canWrite() == false) throw new IOException();
+		} catch (IOException e) {
+			Util.printErrAndExit("\nError: cannot modify the 'sampleSpeciesFile' or parent directory "+sampleSpeciesFile);
+		}
+		
 		
 		//print out settings
 		Util.pl("Config Settings..."+
@@ -686,6 +719,7 @@ public class GNomExAutoAnalysis {
 				"\n  jiraApiUrl\t"+ jiraApiUrl+
 				"\n  dataPolicyUrl\t"+ dataPolicyUrl+
 				"\n  supportedOrgLibWfConfigFile\t"+ supportedOrgLibWfConfigFile+
+				"\n  sampleSpeciesFile\t"+sampleSpeciesFile+
 				"\n  useqJobCleaner\t"+ useqJobCleaner+
 				"\n  useqAggregateQCStats2\t"+ useqAggregateQCStats2
 				);
@@ -696,7 +730,7 @@ public class GNomExAutoAnalysis {
 	public static void printDocs(){
 		Util.pl("\n" +
 				"**************************************************************************************\n" +
-				"**                           GNomEx Auto Analysis: May 2024                         **\n" +
+				"**                           GNomEx Auto Analysis: Dec 2024                         **\n" +
 				"**************************************************************************************\n" +
 				"GAA orchestrates setting up auto analysis jobs from GNomEx Experiment Fastq. It looks\n"+
 				"for ERs in the GNomEx db where the user has selected a genome build to align to,\n"+

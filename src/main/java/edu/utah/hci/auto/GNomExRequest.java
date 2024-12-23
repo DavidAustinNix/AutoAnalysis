@@ -145,7 +145,8 @@ public class GNomExRequest {
 		return false;
 	}
 	
-	/**Returns false if all samples don't have just an _R1_ and _R2_ named fastq, otherwise probably a UMI is present.*/
+	/**Returns false if all samples don't have just  _R1_ and _R2_ s named fastq, otherwise probably a UMI is present.
+	 * Multiple R1s and R2s will be merged.*/
 	public boolean checkR1R2FastqsPerSample() {
 
 			//21369X1_20231010_LH00227_0016_B227FWCLT3_S15_L001_R1_001.fastq.gz
@@ -162,16 +163,18 @@ public class GNomExRequest {
 				}
 				fileNames.add(fileName);
 			}
-			//check that each sample has an _R1_ and _R2_
+			//check that each sample has the same number of _R1_ and _R2_ s and nothing else
 			for (ArrayList<String> al: sampleFastqs.values()) {
 				int r1 = 0;
 				int r2 = 0;
-				if (al.size()!=2) return false;
+				int rOther = 0;
+				//if (al.size()!=2) return false;
 				for (String s: al) {
 					if (s.contains("_R1_")) r1++;
 					else if (s.contains("_R2_")) r2++;
+					else rOther++;
 				}
-				if (r1!=1 || r2!=1) return false;
+				if (r1!=r2 || rOther!=0) return false;
 			}
 			return true;
 	}
