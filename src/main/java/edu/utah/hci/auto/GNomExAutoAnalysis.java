@@ -133,6 +133,7 @@ public class GNomExAutoAnalysis {
 		if (tmpSamples.renameTo(sampleSpeciesFile) == false) {
 			throw new Exception("Error: failed to copy tmp sample species file "+tmpSamples+" to "+sampleSpeciesFile);
 		}
+		sampleSpeciesFile.setReadable(true);
 	}
 
 	private void createJiraTickets() throws Exception{
