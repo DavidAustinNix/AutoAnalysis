@@ -7,6 +7,7 @@ public class GNomExSample {
 	private String sampleId;
 	private String species;
 	private String requestCreationDate;
+	private String oraSpecies;
 	
 	public GNomExSample(String[] results) {
 		requestId = results[0];
@@ -20,6 +21,7 @@ public class GNomExSample {
 		sb.append(requestId); sb.append("\t");
 		sb.append(sampleId); sb.append("\t");
 		sb.append(species); sb.append("\t");
+		sb.append(oraSpecies); sb.append("\t");
 		sb.append(requestCreationDate);
 		return sb.toString();
 	}
@@ -38,6 +40,11 @@ public class GNomExSample {
 
 	public String getRequestCreationDate() {
 		return requestCreationDate;
+	}
+
+	public void setOraSpecies(String oraSpecies) {
+		this.oraSpecies = oraSpecies;
+		
 	}
 
 }

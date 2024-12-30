@@ -64,6 +64,7 @@ public class GNomExAutoAnalysis {
 	private String dnaAlignQCWFName = "dnaAlignQC";
 	public static int minimumFastqFileLineCount = 4000;
 	private HashSet<String> idsWithJiraTickets = null;
+	private OraSpeciesMatcher oraSpeciesMatcher = null;
 	
 	//Requests split by status
 	private ArrayList<GNomExRequest> grsToBuildAutoAnalysis = new ArrayList<GNomExRequest>();
@@ -122,11 +123,23 @@ public class GNomExAutoAnalysis {
 	}
 
 	private void parseSampleSpecies(GNomExSample[] samples) throws Exception{
-		Util.pl("Writing out new SampleID Species file for ORA...");
+		Util.pl("Parsing Sample Species for ORA...");
+		
+		//set ora species in samples
+		String currGSpecies = "";
+		String currOSpecies = "";
+		for (GNomExSample s: samples) {
+			if (s.getSpecies().equals(currGSpecies) == false) {
+				currGSpecies = s.getSpecies();
+				currOSpecies = oraSpeciesMatcher.fetchOraSpecies(currGSpecies);
+			}
+			s.setOraSpecies(currOSpecies);
+		}
+		
 		//write out new tmp sample file
 		File tmpSamples = new File(sampleSpeciesFile.getParent(), "tmp_"+sampleSpeciesFile.getName());
 		PrintWriter out = new PrintWriter( new FileWriter(tmpSamples));
-		out.println("#ExperimentID\tSampleID\tSpecies\tCreationDate");
+		out.println("#ExperimentID\tSampleID\tSpecies\tOraCompressionSpecies\tCreationDate");
 		for (GNomExSample s: samples) out.println(s.toString());
 		out.close();
 		//copy it to the real location
@@ -565,6 +578,9 @@ public class GNomExAutoAnalysis {
 		loadSupportedWorkflows();
 		
 		parseProcessCredentialsFile();
+		
+		Util.pl("\nLoading pattern species matcher for ORA compression...");
+		oraSpeciesMatcher = new OraSpeciesMatcher();
 
 
 	}	

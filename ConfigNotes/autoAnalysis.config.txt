@@ -1,5 +1,5 @@
 # Key TAB Value configuration file for the GNomEx and Chpc AutoAnalysis daemons
-# Last Edit 23 Dec 2024 - david.nix@hci.utah.edu
+# Last Edit 26 Dec 2024 - david.nix@hci.utah.edu
 
 ########## GNomExAutoAnalysis Specific ###########
 
@@ -9,7 +9,7 @@
 connectionUrl	jdbc:sqlserver://hci-db.hci.utah.edu:1433;databaseName=gnomex;user=pipeline;password=XXXXXXXXXX;encrypt=true;trustServerCertificate=true
 
 # Full path to the repo containing Experiment Requests organized by year
-	# experimentDir	/home/tomatosrvs/AutoAnalysis/Test/MockRepo
+	# experimentDir	/home/tomatosrvs/AutoAnalysis/MockRepo
 experimentDir	/Repository/MicroarrayData/
 
 # GNomEx experiment link/ sharing URL, this will be appended with particular Experiment Request ID, e.g. 14288R1
@@ -22,13 +22,13 @@ jiraUrl	https://uofuhealth.utah.edu/huntsman/shared-resources/gcb/cbi/help-reque
 jiraApiUrl	https://ri-jira.hci.utah.edu/rest/api/2/issue/
 
 # File to record which GNomEx IDs have had a Jira Help Request ticket created for them. It must exist but can be empty.
-builtJiraTickets	/home/tomatosrvs/AutoAnalysis/Test/builtJiraTickets.txt
+builtJiraTickets	/home/tomatosrvs/AutoAnalysis/builtJiraTickets.txt
 
 # File to record GNomEx SampleIDs and species for demux ORA configuration. It doesn't have to exist, must be able to write to the parent dir.
-sampleSpeciesFile	/home/tomatosrvs/AutoAnalysis/Test/sampleSpeciesForORA.txt
+sampleSpeciesFile	/home/tomatosrvs/AutoAnalysis/sampleSpeciesForORA.txt
 
 # CHPC temporary directory, used to write shell scripts to lauch slurm jobs
-hciTempDirectory	/home/tomatosrvs/AutoAnalysis/Test/TempDir
+hciTempDirectory	/home/tomatosrvs/AutoAnalysis/TempDir
 
 # Data policy page Url
 dataPolicyUrl	https://uofuhealth.utah.edu/huntsman/shared-resources/gcb/cbi/data-access-storage
@@ -39,13 +39,13 @@ testRequest	all
 # testRequest	24184R
 
 # Supported organisms library prep configuration file
-supportedOrgLibWfConfigFile	/home/tomatosrvs/AutoAnalysis/Test/autoAnalysis.wf.config.txt
+supportedOrgLibWfConfigFile	/home/tomatosrvs/AutoAnalysis/autoAnalysis.wf.config.txt
 
 # Path to the USeq JobCleaner app. This is called after running QC tools on each Job directory to reduce the number of small files. It deletes .crai/.bai/.tbi indexes, COMPLETE files, and zips up Logs and RunScripts folders.
-useqJobCleaner	/home/tomatosrvs/AutoAnalysis/Test/USeq/Apps/JobCleaner
+useqJobCleaner	/home/tomatosrvs/AutoAnalysis/USeq/Apps/JobCleaner
 
 # Path to the USeq AggregateQC2 app. Only run on the dnaAlignQC jobs.  Nice summary statistics difficult to find in MultiQC.
-useqAggregateQCStats2	/home/tomatosrvs/AutoAnalysis/Test/USeq/Apps/AggregateQCStats2
+useqAggregateQCStats2	/home/tomatosrvs/AutoAnalysis/USeq/Apps/AggregateQCStats2
 
 # Email addresses to send new analysis alerts, e.g. for HTG
 analysisReadyEmail	brian.dalley@hci.utah.edu,Opal.Allen@hci.utah.edu,david.nix@hci.utah.edu
@@ -58,7 +58,7 @@ analysisReadyEmail	brian.dalley@hci.utah.edu,Opal.Allen@hci.utah.edu,david.nix@h
 	# GNomExAutoAnalysis creates Analysis dirs in each Experiment Request, soft links in the paired fastq files, and then soft links each directory into this job staging directory.
 	# The ChpcAutoAnalysis daemon on CHPC will be searching this directory for Analysis jobs with a RUNME file (but no COMPLETE file) to copy over and submit to the redwood cluster. 
 	# The GNomExAutoAnalysis scans these soft linked directories for a COMPLETE file and then deletes the soft link leaving the finished dir in the Experiment Request.
-hciLinkDirectory	/home/tomatosrvs/AutoAnalysis/Test/Jobs4CHPC/
+hciLinkDirectory	/home/tomatosrvs/AutoAnalysis/Jobs4CHPC/
 
 # Email addresses to send updates and issues, comma delimited, no spaces
 adminEmail	david.nix@hci.utah.edu
@@ -77,7 +77,7 @@ hciUserNameIp	tomatosrvs@hci-deadhorse.hci.utah.edu
 chpcJobDirectory	/scratch/general/pe-nfs1/hcipepipeline/AutoAnalysis/Jobs
 
 # CHPC temporary directory, used to write shell scripts to lauch slurm jobs
-chpcTempDirectory	/uufs/chpc.utah.edu/common/HIPAA/hcipepipeline/AutoAnalysis/Test/TempDir
+chpcTempDirectory	/uufs/chpc.utah.edu/common/HIPAA/hcipepipeline/AutoAnalysis/TempDir
 
 # CHPC slurm info, the truncated user name as displayed in a sbatch output
 slurmPartiton	hci-rw

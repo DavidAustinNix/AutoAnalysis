@@ -19,8 +19,8 @@ rsync -rPtL ~/Code/AutoAnalysis/target/AutoAnalysis-0.1-jar-with-dependencies.ja
   ~/Code/AutoAnalysis/ConfigNotes/autoAnalysis.* \
   hci-dragen:/home/u0028003/ForAutoAnalysisDelme/
 
-# On dragen as tomatosrvs in /home/tomatosrvs/AutoAnalysis/Test
-ssh hci-dragen; sudo su tomatosrvs; cd ~/AutoAnalysis/Test/
+# On dragen as tomatosrvs in /home/tomatosrvs/AutoAnalysis/
+ssh hci-dragen; sudo su tomatosrvs; cd ~/AutoAnalysis/
 top # kill any running AutoAnalysis
 cp /home/u0028003/ForAutoAnalysisDelme/* .
 nohup java -jar -Xmx1G AutoAnalysis-0.1-jar-with-dependencies.jar -l HCI -c autoAnalysis.config.txt \
@@ -36,8 +36,8 @@ rsync -rPtL ~/Code/AutoAnalysis/target/AutoAnalysis-0.1-jar-with-dependencies.ja
   ~/Code/AutoAnalysis/ConfigNotes/autoAnalysis.* \
   kingspeak.chpc.utah.edu:/uufs/chpc.utah.edu/common/home/u0028003/ForAutoAnalysisDelme/
 
-# On redwood2 as hcipepipeline in ~/AutoAnalysis/Test, see above for login process
-cd ~/AutoAnalysis/Test/
+# On redwood2 as hcipepipeline in ~/AutoAnalysis/, see above for login process
+cd ~/AutoAnalysis/
 top # kill any running AutoAnalysis
 mkdir Logs TempDir
 ln -s /scratch/general/pe-nfs1/hcipepipeline/AutoAnalysis/Jobs .
