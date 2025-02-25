@@ -28,7 +28,7 @@ nohup java -jar -Xmx1G AutoAnalysis-0.1-jar-with-dependencies.jar -l HCI -c auto
 tail -f daemon.log 
 
 # If needed start up the docker daemon, as root on dragen:
-systemctl start docker
+sudo systemctl start docker
 
 ######## For testing the CHPC daemon ########
 # On laptop

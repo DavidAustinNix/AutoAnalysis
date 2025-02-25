@@ -60,14 +60,14 @@ public class GNomExDbQuery {
 }
 	private void runSpeciesQuery(Driver d, Connection con) throws Exception{
 		
-		String SQL = "SELECT DISTINCT request.number, sample.number, organism.organism, request.createDate "+
+		String SQL = "SELECT DISTINCT request.number, sample.number, organism.organism, request.createDate, request.oraCompression "+
 		"FROM request "+
 		"join project on project.idproject = request.idproject "+
 		"join sample on sample.idrequest = request.idrequest "+
 		"join organism on sample.idorganism = organism.idorganism "+
 		"WHERE request.createDate > (select dateadd(month, -12, getdate())) ORDER BY request.createDate;";
 		
-		int numReturnValues = 4;
+		int numReturnValues = 5;
 		
 		stmt = con.createStatement();
 		rs = stmt.executeQuery(SQL);
@@ -140,7 +140,7 @@ public class GNomExDbQuery {
 
 	public static void main (String[] args) {
 		//replace xxxxx pwd from https://ri-confluence.hci.utah.edu/pages/viewpage.action?pageId=38076459
-		String connectionUrl = "jdbc:sqlserver://hci-db.hci.utah.edu:1433;databaseName=gnomex;user=pipeline;password=XXXXXX;encrypt=true;trustServerCertificate=true";
+		String connectionUrl = "jdbc:sqlserver://hci-db.hci.utah.edu:1433;databaseName=gnomex;user=pipeline;password=xxxxx;encrypt=true;trustServerCertificate=true";
 		new GNomExDbQuery(connectionUrl, true);
 	}
 

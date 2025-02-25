@@ -8,12 +8,14 @@ public class GNomExSample {
 	private String species;
 	private String requestCreationDate;
 	private String oraSpecies;
+	private boolean oraCompress = true;
 	
 	public GNomExSample(String[] results) {
 		requestId = results[0];
 		sampleId = results[1];
 		species = results[2];
 		requestCreationDate = results[3];
+		if (results[4].equals("N")) oraCompress = false;
 	}
 	
 	public String toString() {
@@ -21,6 +23,7 @@ public class GNomExSample {
 		sb.append(requestId); sb.append("\t");
 		sb.append(sampleId); sb.append("\t");
 		sb.append(species); sb.append("\t");
+		sb.append(oraCompress); sb.append("\t");
 		sb.append(oraSpecies); sb.append("\t");
 		sb.append(requestCreationDate);
 		return sb.toString();

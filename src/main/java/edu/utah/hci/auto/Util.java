@@ -100,6 +100,33 @@ public class Util {
 		}
 	}
 	
+	public static void sendMuttEmail(String subject, String emailAddresses, String body) {
+		String cmd = "";
+		try {
+			
+			/*
+			 echo "This is the email body." | \
+  				mutt -s "Subject Line Testing" -e "my_hdr Reply-To: noreply_auto_analysis@hci.utah.edu" \
+  				david.austin.nix@gmail.com,david.nix@hci.utah.edu
+
+			 */
+
+			//execute via a shell script
+			cmd = "echo \""+body+"\" | mutt -s \""+subject+"\" -e 'my_hdr Reply-To: noreply_auto_analysis@hci.utah.edu' "+emailAddresses;
+		
+			//check for tmp dir
+			File tmpDir = new File(System.getProperty("java.io.tmpdir"));
+			if (tmpDir.exists()==false) throw new Exception("ERROR: failed to find tmp dir. "+tmpDir);
+			
+			int exit = Util.executeShellScriptReturnExitCode(cmd, tmpDir);			
+			//this never happens?
+			if (exit != 0) throw new IOException ("Non zero exit code from: "+cmd);
+
+		} catch (Exception e) {
+			pl("\nERROR: sending mutt email "+e.getMessage()+"\n"+e.getStackTrace()+"\n"+cmd);
+		}
+	}
+	
 	public static final String[] months = {"Jan","Feb","Mar","Apr","May","June","July", "Aug","Sept","Oct","Nov","Dec"};
 	/**Returns a nicely formated time, 15 May 2004 21:53 */
 	public static String getDateTime(){

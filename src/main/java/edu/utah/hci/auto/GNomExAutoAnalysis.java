@@ -121,7 +121,7 @@ public class GNomExAutoAnalysis {
 			System.exit(1);
 		}
 	}
-
+	
 	private void parseSampleSpecies(GNomExSample[] samples) throws Exception{
 		Util.pl("Parsing Sample Species for ORA...");
 		
@@ -139,7 +139,7 @@ public class GNomExAutoAnalysis {
 		//write out new tmp sample file
 		File tmpSamples = new File(sampleSpeciesFile.getParent(), "tmp_"+sampleSpeciesFile.getName());
 		PrintWriter out = new PrintWriter( new FileWriter(tmpSamples));
-		out.println("#ExperimentID\tSampleID\tSpecies\tOraCompressionSpecies\tCreationDate");
+		out.println("#ExperimentID\tSampleID\tSpecies\tOraCompress\tOraCompressionSpecies\tCreationDate");
 		for (GNomExSample s: samples) out.println(s.toString());
 		out.close();
 		//copy it to the real location
@@ -214,7 +214,7 @@ public class GNomExAutoAnalysis {
 			String subject = "GNomEx AutoAnalysis is alive "+Util.getDateTime();
 			String body = "\n"+jobsProcessed.size()+" jobs processed in the last 24hrs\n";
 			if (jobsProcessed.size()!=0) body = body + jobsProcessed;
-			Util.sendEmail(subject, adminEmail, body, verbose);
+			Util.sendMuttEmail(subject, adminEmail, body);
 			jobsProcessed.clear();
 		}
 		
@@ -233,7 +233,7 @@ public class GNomExAutoAnalysis {
 		Util.pl("Emailing error messages...");
 		String subject = "GNomExAutoAnalysis ERROR";
 		String body = error+"\n"+e.toString();
-		Util.sendEmail(subject, adminEmail, body, verbose);
+		Util.sendMuttEmail(subject, adminEmail, body);
 	}
 	
 	private void runMultiQCEmailClients() throws IOException {
@@ -251,7 +251,7 @@ public class GNomExAutoAnalysis {
 			String name = gr.getRequestIdCleaned();
 			
 			// See if there are any additional multiQC options
-			String orgLib = gr.getOrganism()+"_"+gr.getLibraryPreparation();
+			String orgLib = gr.getOrganism()+"_"+Util.WHITE_SPACE.matcher(gr.getLibraryPreparation()).replaceAll("");
 			String opts = orgLibWorkflowDocs.get(orgLib)[1].trim();
 			if (opts.toLowerCase().equals("none")) opts = "";
 			
@@ -300,11 +300,11 @@ public class GNomExAutoAnalysis {
 		sb.append("\tRequestor: "+gr.getRequestorEmail()+ "\n\n");
 		sb.append("Access these via:\n\t"+experimentLinkUrl+ gr.getOriginalRequestId()+ "\n\tand look in the  '"+gr.getAutoAnalysisMainDirectory().getName()+"'  directory.\n\n");
 		sb.append("If you would like additional analysis assistance, submit a help request through our Jira ticketing system:\n\t"+ jiraUrl+"\n\n");
-		sb.append("Lastly, remember that all of the data files in this Experiment Request will be deleted after six months. If your group has a CORE "
+		sb.append("Lastly, remember that all of the data files in this Experiment Request will be deleted after three months. If your group has a CORE "
 				+ "Browser configured AWS account (https://hci-apps-ext.hci.utah.edu/core-browser), the files will be uploaded into it and then deleted. See:\n\t"+ dataPolicyUrl+ "\n\n");
 		sb.append("HCI Cancer Bioinformatics Shared Resource (CBI)\nhttps://huntsmancancer.org/cbi\n\n");
 
-		Util.sendEmail(subject, gr.getRequestorEmail()+","+analysisReadyEmail, sb.toString(), verbose);
+		Util.sendMuttEmail(subject, gr.getRequestorEmail()+","+analysisReadyEmail, sb.toString());
 		
 	}
 
@@ -457,7 +457,7 @@ public class GNomExAutoAnalysis {
 				//run a bunch of other checks to see if an AutoAnalysis could be assembled
 				else {
 					//is this a supported organism_libraryPrep?
-					String orgLib = r.getOrganism()+"_"+r.getLibraryPreparation();
+					String orgLib = r.getOrganism()+"_"+Util.WHITE_SPACE.matcher(r.getLibraryPreparation()).replaceAll("");
 					if (orgLibWorkflowDocs.containsKey(orgLib)) {
 						String[] pathsMultiQCOptions = orgLibWorkflowDocs.get(orgLib);
 						//check fastq for dnaAlignQC?
@@ -525,7 +525,7 @@ public class GNomExAutoAnalysis {
 			for (String olp: missingOrgLibPrep.keySet()) {
 				sb.append(missingOrgLibPrep.get(olp)); sb.append("\t"); sb.append(olp); sb.append("\n");
 			}
-			Util.sendEmail(subject, adminEmail, sb.toString(), verbose);
+			Util.sendMuttEmail(subject, adminEmail, sb.toString());
 			Util.pl("\nNew unsupported organism : library prep kits found...");
 			Util.pl(sb);
 		}
@@ -618,7 +618,7 @@ public class GNomExAutoAnalysis {
 			else {
 				String[] libPreps = Util.SEMI_COLON_SPACE.split(fields[1]);
 				for (String lp: libPreps) {
-					String key = fields[0].trim()+"_"+lp.trim();
+					String key = fields[0].trim()+"_"+Util.WHITE_SPACE.matcher(lp).replaceAll("");
 					orgLibWorkflowDocs.put(key, new String[] {fields[2], fields[3]});
 				}
 				if (verbose) Util.pl("\t"+line);
@@ -747,13 +747,13 @@ public class GNomExAutoAnalysis {
 	public static void printDocs(){
 		Util.pl("\n" +
 				"**************************************************************************************\n" +
-				"**                           GNomEx Auto Analysis: Dec 2024                         **\n" +
+				"**                           GNomEx Auto Analysis: Jan 2025                         **\n" +
 				"**************************************************************************************\n" +
 				"GAA orchestrates setting up auto analysis jobs from GNomEx Experiment Fastq. It looks\n"+
 				"for ERs in the GNomEx db where the user has selected a genome build to align to,\n"+
 				"finds those with a match to the supported organisms and library types, assembles the\n"+
 				"directories, links in the fastq, and adds a RUNME file containing info for the\n "+
-				"ChpcAutoAnalysis daemon.\n"+
+				"ChpcAutoAnalysis daemon. Uses mutt for mail so be sure to install it.\n"+
 
 				"\nOptions:\n"+
 				"   -c Path to the AutoAnalysis configuration file.\n"+
